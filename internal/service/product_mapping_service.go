@@ -1,0 +1,429 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/dujiao-next/internal/constants"
+	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/repository"
+	"github.com/dujiao-next/internal/upstream"
+
+	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+)
+
+var (
+	ErrMappingNotFound         = errors.New("product mapping not found")
+	ErrMappingAlreadyExists    = errors.New("product mapping already exists for this upstream product")
+	ErrUpstreamProductNotFound = errors.New("upstream product not found")
+	ErrMappingInactive         = errors.New("product mapping is inactive")
+)
+
+// ProductMappingService 商品映射业务服务
+type ProductMappingService struct {
+	mappingRepo    repository.ProductMappingRepository
+	skuMappingRepo repository.SKUMappingRepository
+	productRepo    repository.ProductRepository
+	productSKURepo repository.ProductSKURepository
+	connService    *SiteConnectionService
+}
+
+// NewProductMappingService 创建商品映射服务
+func NewProductMappingService(
+	mappingRepo repository.ProductMappingRepository,
+	skuMappingRepo repository.SKUMappingRepository,
+	productRepo repository.ProductRepository,
+	productSKURepo repository.ProductSKURepository,
+	connService *SiteConnectionService,
+) *ProductMappingService {
+	return &ProductMappingService{
+		mappingRepo:    mappingRepo,
+		skuMappingRepo: skuMappingRepo,
+		productRepo:    productRepo,
+		productSKURepo: productSKURepo,
+		connService:    connService,
+	}
+}
+
+// ImportUpstreamProduct 从上游导入商品（克隆为本地商品 + 建立映射）
+func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstreamProductID uint, categoryID uint, slug string) (*models.ProductMapping, error) {
+	// 检查是否已存在映射
+	existing, err := s.mappingRepo.GetByConnectionAndUpstreamID(connectionID, upstreamProductID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, ErrMappingAlreadyExists
+	}
+
+	// 获取连接
+	conn, err := s.connService.GetByID(connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if conn == nil {
+		return nil, ErrConnectionNotFound
+	}
+
+	// 获取适配器
+	adapter, err := s.connService.GetAdapter(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	// 拉取上游商品
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	upProduct, err := adapter.GetProduct(ctx, upstreamProductID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch upstream product: %w", err)
+	}
+	if upProduct == nil {
+		return nil, ErrUpstreamProductNotFound
+	}
+
+	// 下载图片到本地
+	localImages := s.downloadImages(ctx, adapter, upProduct.Images)
+
+	// 确定交付类型：上游商品映射后统一使用 upstream 类型
+	fulfillmentType := constants.FulfillmentTypeUpstream
+
+	// 解析价格
+	priceAmount, _ := decimal.NewFromString(upProduct.PriceAmount)
+	if priceAmount.LessThanOrEqual(decimal.Zero) && len(upProduct.SKUs) > 0 {
+		// 取 SKU 最低价
+		for _, sku := range upProduct.SKUs {
+			skuPrice, _ := decimal.NewFromString(sku.PriceAmount)
+			if skuPrice.GreaterThan(decimal.Zero) && (priceAmount.IsZero() || skuPrice.LessThan(priceAmount)) {
+				priceAmount = skuPrice
+			}
+		}
+	}
+
+	// 创建本地商品
+	product := models.Product{
+		CategoryID:           categoryID,
+		Slug:                 slug,
+		TitleJSON:            upProduct.Title,
+		DescriptionJSON:      upProduct.Description,
+		ContentJSON:          upProduct.Content,
+		ManualFormSchemaJSON: upProduct.ManualFormSchema,
+		PriceAmount:          models.NewMoneyFromDecimal(priceAmount.Round(2)),
+		Images:               models.StringArray(localImages),
+		Tags:                 models.StringArray(upProduct.Tags),
+		PurchaseType:         constants.ProductPurchaseMember,
+		FulfillmentType:      fulfillmentType,
+		ManualStockTotal:     0,
+		IsMapped:             true,
+		IsActive:             false, // 默认下架，管理员手动上架
+		SortOrder:            0,
+	}
+
+	// 使用事务创建本地商品 + 映射
+	if err := s.productRepo.Transaction(func(tx *gorm.DB) error {
+		productRepo := s.productRepo.WithTx(tx)
+		if err := productRepo.Create(&product); err != nil {
+			return fmt.Errorf("create local product: %w", err)
+		}
+
+		// 创建 SKU
+		skuRepo := s.productSKURepo.WithTx(tx)
+		for _, upSKU := range upProduct.SKUs {
+			skuPrice, _ := decimal.NewFromString(upSKU.PriceAmount)
+			localSKU := models.ProductSKU{
+				ProductID:      product.ID,
+				SKUCode:        upSKU.SKUCode,
+				SpecValuesJSON: upSKU.SpecValues,
+				PriceAmount:    models.NewMoneyFromDecimal(skuPrice.Round(2)),
+				IsActive:       upSKU.IsActive,
+				SortOrder:      0,
+			}
+			if err := skuRepo.Create(&localSKU); err != nil {
+				return fmt.Errorf("create local sku: %w", err)
+			}
+		}
+
+		// 如果没有 SKU，创建默认 SKU
+		if len(upProduct.SKUs) == 0 {
+			defaultSKU := models.ProductSKU{
+				ProductID:      product.ID,
+				SKUCode:        models.DefaultSKUCode,
+				SpecValuesJSON: models.JSON{},
+				PriceAmount:    models.NewMoneyFromDecimal(priceAmount.Round(2)),
+				IsActive:       true,
+				SortOrder:      0,
+			}
+			if err := skuRepo.Create(&defaultSKU); err != nil {
+				return fmt.Errorf("create default sku: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	// 重新读取带 SKU 的商品
+	localProduct, err := s.productRepo.GetByID(strconv.FormatUint(uint64(product.ID), 10))
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建 ProductMapping
+	now := time.Now()
+	mapping := &models.ProductMapping{
+		ConnectionID:      connectionID,
+		LocalProductID:    product.ID,
+		UpstreamProductID: upstreamProductID,
+		IsActive:          true,
+		LastSyncedAt:      &now,
+	}
+	if err := s.mappingRepo.Create(mapping); err != nil {
+		return nil, fmt.Errorf("create product mapping: %w", err)
+	}
+
+	// 创建 SKU 映射
+	if localProduct != nil {
+		if err := s.createSKUMappings(mapping.ID, localProduct.SKUs, upProduct.SKUs); err != nil {
+			return nil, fmt.Errorf("create sku mappings: %w", err)
+		}
+	}
+
+	return mapping, nil
+}
+
+// createSKUMappings 根据本地和上游 SKU 建立映射
+func (s *ProductMappingService) createSKUMappings(mappingID uint, localSKUs []models.ProductSKU, upstreamSKUs []upstream.UpstreamSKU) error {
+	if len(localSKUs) == 0 || len(upstreamSKUs) == 0 {
+		return nil
+	}
+
+	// 按 SKUCode 匹配
+	upstreamByCode := make(map[string]upstream.UpstreamSKU, len(upstreamSKUs))
+	for _, us := range upstreamSKUs {
+		upstreamByCode[strings.ToLower(strings.TrimSpace(us.SKUCode))] = us
+	}
+
+	for _, localSKU := range localSKUs {
+		code := strings.ToLower(strings.TrimSpace(localSKU.SKUCode))
+		upSKU, ok := upstreamByCode[code]
+		if !ok {
+			// 如果只有一个 SKU（DEFAULT），匹配第一个上游 SKU
+			if len(localSKUs) == 1 && len(upstreamSKUs) == 1 {
+				upSKU = upstreamSKUs[0]
+			} else {
+				continue
+			}
+		}
+
+		upPrice, _ := decimal.NewFromString(upSKU.PriceAmount)
+		skuMapping := &models.SKUMapping{
+			ProductMappingID: mappingID,
+			LocalSKUID:       localSKU.ID,
+			UpstreamSKUID:    upSKU.ID,
+			UpstreamPrice:    models.NewMoneyFromDecimal(upPrice.Round(2)),
+			UpstreamIsActive: upSKU.IsActive,
+		}
+		if err := s.skuMappingRepo.Create(skuMapping); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// downloadImages 下载上游图片到本地
+func (s *ProductMappingService) downloadImages(ctx context.Context, adapter upstream.Adapter, images []string) []string {
+	var localImages []string
+	for _, img := range images {
+		if strings.TrimSpace(img) == "" {
+			continue
+		}
+		localPath, err := adapter.DownloadImage(ctx, img)
+		if err != nil {
+			// 下载失败保留原始 URL
+			localImages = append(localImages, img)
+			continue
+		}
+		localImages = append(localImages, localPath)
+	}
+	return localImages
+}
+
+// SyncProduct 同步单个映射商品的上游数据
+func (s *ProductMappingService) SyncProduct(mappingID uint) error {
+	mapping, err := s.mappingRepo.GetByID(mappingID)
+	if err != nil {
+		return err
+	}
+	if mapping == nil {
+		return ErrMappingNotFound
+	}
+
+	conn, err := s.connService.GetByID(mapping.ConnectionID)
+	if err != nil {
+		return err
+	}
+	if conn == nil {
+		return ErrConnectionNotFound
+	}
+
+	adapter, err := s.connService.GetAdapter(conn)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	upProduct, err := adapter.GetProduct(ctx, mapping.UpstreamProductID)
+	if err != nil {
+		return fmt.Errorf("fetch upstream product: %w", err)
+	}
+
+	// 更新 SKU 映射的价格和库存信息
+	skuMappings, err := s.skuMappingRepo.ListByProductMapping(mappingID)
+	if err != nil {
+		return err
+	}
+
+	upstreamSKUMap := make(map[uint]upstream.UpstreamSKU, len(upProduct.SKUs))
+	for _, us := range upProduct.SKUs {
+		upstreamSKUMap[us.ID] = us
+	}
+
+	now := time.Now()
+	for i := range skuMappings {
+		upSKU, ok := upstreamSKUMap[skuMappings[i].UpstreamSKUID]
+		if !ok {
+			skuMappings[i].UpstreamIsActive = false
+			skuMappings[i].StockSyncedAt = &now
+			_ = s.skuMappingRepo.Update(&skuMappings[i])
+			continue
+		}
+
+		upPrice, _ := decimal.NewFromString(upSKU.PriceAmount)
+		skuMappings[i].UpstreamPrice = models.NewMoneyFromDecimal(upPrice.Round(2))
+		skuMappings[i].UpstreamIsActive = upSKU.IsActive
+		skuMappings[i].StockSyncedAt = &now
+
+		// 解析库存状态
+		switch upSKU.StockStatus {
+		case constants.ProductStockStatusOutOfStock:
+			skuMappings[i].UpstreamStock = 0
+		case constants.ProductStockStatusUnlimited:
+			skuMappings[i].UpstreamStock = -1
+		case constants.ProductStockStatusInStock:
+			skuMappings[i].UpstreamStock = 999 // 有库存但不知道具体数量
+		case constants.ProductStockStatusLowStock:
+			skuMappings[i].UpstreamStock = 1
+		}
+
+		_ = s.skuMappingRepo.Update(&skuMappings[i])
+	}
+
+	// 更新同步时间
+	mapping.LastSyncedAt = &now
+	return s.mappingRepo.Update(mapping)
+}
+
+// SyncAllStock 同步所有活跃映射的库存（供定时任务调用）
+func (s *ProductMappingService) SyncAllStock() error {
+	mappings, err := s.mappingRepo.ListAllActive()
+	if err != nil {
+		return err
+	}
+
+	var lastErr error
+	for _, mapping := range mappings {
+		if err := s.SyncProduct(mapping.ID); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// GetByID 获取映射详情
+func (s *ProductMappingService) GetByID(id uint) (*models.ProductMapping, error) {
+	return s.mappingRepo.GetByID(id)
+}
+
+// List 列表查询映射
+func (s *ProductMappingService) List(filter repository.ProductMappingListFilter) ([]models.ProductMapping, int64, error) {
+	return s.mappingRepo.List(filter)
+}
+
+// SetActive 启用/禁用映射
+func (s *ProductMappingService) SetActive(id uint, active bool) error {
+	mapping, err := s.mappingRepo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if mapping == nil {
+		return ErrMappingNotFound
+	}
+	mapping.IsActive = active
+	return s.mappingRepo.Update(mapping)
+}
+
+// Delete 删除映射（不删除本地商品）
+func (s *ProductMappingService) Delete(id uint) error {
+	mapping, err := s.mappingRepo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if mapping == nil {
+		return ErrMappingNotFound
+	}
+
+	// 删除 SKU 映射
+	if err := s.skuMappingRepo.DeleteByProductMapping(id); err != nil {
+		return err
+	}
+
+	// 将本地商品的 IsMapped 标记还原
+	if mapping.LocalProductID > 0 {
+		localProduct, err := s.productRepo.GetByID(strconv.FormatUint(uint64(mapping.LocalProductID), 10))
+		if err == nil && localProduct != nil {
+			localProduct.IsMapped = false
+			_ = s.productRepo.Update(localProduct)
+		}
+	}
+
+	return s.mappingRepo.Delete(id)
+}
+
+// GetSKUMappings 获取映射的 SKU 映射列表
+func (s *ProductMappingService) GetSKUMappings(mappingID uint) ([]models.SKUMapping, error) {
+	return s.skuMappingRepo.ListByProductMapping(mappingID)
+}
+
+// ListUpstreamProducts 通过连接代理拉取上游商品列表
+func (s *ProductMappingService) ListUpstreamProducts(connectionID uint, page, pageSize int) (*upstream.ProductListResult, error) {
+	conn, err := s.connService.GetByID(connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if conn == nil {
+		return nil, ErrConnectionNotFound
+	}
+
+	adapter, err := s.connService.GetAdapter(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	return adapter.ListProducts(ctx, upstream.ListProductsOpts{
+		Page:     page,
+		PageSize: pageSize,
+	})
+}

@@ -314,6 +314,24 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.POST("/api-credentials/:id/reject", adminHandler.RejectApiCredential)
 				authorized.PUT("/api-credentials/:id/status", adminHandler.UpdateApiCredentialStatus)
 				authorized.DELETE("/api-credentials/:id", adminHandler.DeleteApiCredential)
+
+				// 站点对接连接管理
+				authorized.GET("/site-connections", adminHandler.GetSiteConnections)
+				authorized.GET("/site-connections/:id", adminHandler.GetSiteConnection)
+				authorized.POST("/site-connections", adminHandler.CreateSiteConnection)
+				authorized.PUT("/site-connections/:id", adminHandler.UpdateSiteConnection)
+				authorized.DELETE("/site-connections/:id", adminHandler.DeleteSiteConnection)
+				authorized.POST("/site-connections/:id/ping", adminHandler.PingSiteConnection)
+				authorized.PUT("/site-connections/:id/status", adminHandler.UpdateSiteConnectionStatus)
+
+				// 商品映射管理
+				authorized.GET("/product-mappings", adminHandler.GetProductMappings)
+				authorized.GET("/product-mappings/:id", adminHandler.GetProductMapping)
+				authorized.POST("/product-mappings/import", adminHandler.ImportUpstreamProduct)
+				authorized.POST("/product-mappings/:id/sync", adminHandler.SyncProductMapping)
+				authorized.PUT("/product-mappings/:id/status", adminHandler.UpdateProductMappingStatus)
+				authorized.DELETE("/product-mappings/:id", adminHandler.DeleteProductMapping)
+				authorized.GET("/upstream-products", adminHandler.ListUpstreamProducts)
 			}
 		}
 	}

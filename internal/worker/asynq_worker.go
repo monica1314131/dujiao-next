@@ -41,6 +41,7 @@ func (c *Consumer) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(queue.TaskWalletRechargeExpire, c.handleWalletRechargeExpire)
 	mux.HandleFunc(queue.TaskNotificationDispatch, c.handleNotificationDispatch)
 	mux.HandleFunc(queue.TaskAffiliateConfirmCommissions, c.handleAffiliateConfirmCommissions)
+	mux.HandleFunc(queue.TaskUpstreamSyncStock, c.handleUpstreamSyncStock)
 }
 
 func (c *Consumer) handleOrderStatusEmail(_ context.Context, task *asynq.Task) error {
@@ -269,6 +270,18 @@ func (c *Consumer) handleAffiliateConfirmCommissions(_ context.Context, _ *asynq
 	}
 	if err := c.AffiliateService.ConfirmDueCommissions(time.Now()); err != nil {
 		logger.Warnw("worker_affiliate_confirm_due_failed", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (c *Consumer) handleUpstreamSyncStock(_ context.Context, _ *asynq.Task) error {
+	if c == nil || c.ProductMappingService == nil {
+		logger.Debugw("worker_upstream_sync_stock_skip_nil", "consumer_nil", c == nil)
+		return nil
+	}
+	if err := c.ProductMappingService.SyncAllStock(); err != nil {
+		logger.Warnw("worker_upstream_sync_stock_failed", "error", err)
 		return err
 	}
 	return nil

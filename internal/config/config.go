@@ -13,6 +13,7 @@ import (
 
 // Config 应用配置结构
 type Config struct {
+	App          AppConfig          `mapstructure:"app"`
 	Server       ServerConfig       `mapstructure:"server"`
 	Log          LogConfig          `mapstructure:"log"`
 	Database     DatabaseConfig     `mapstructure:"database"`
@@ -28,6 +29,11 @@ type Config struct {
 	Email        EmailConfig        `mapstructure:"email"`
 	Order        OrderConfig        `mapstructure:"order"`
 	Captcha      CaptchaConfig      `mapstructure:"captcha"`
+}
+
+// AppConfig 应用级配置
+type AppConfig struct {
+	SecretKey string `mapstructure:"secret_key"` // 通用加密密钥（AES-256，用于加密存储敏感信息）
 }
 
 // ServerConfig 服务器配置
@@ -259,6 +265,7 @@ func Load() *Config {
 	viper.AddConfigPath("./etc") // etc 文件夹
 
 	// 设置默认值（可选）
+	viper.SetDefault("app.secret_key", "change-me-32-byte-secret-key!!")
 	viper.SetDefault("server.host", "0.0.0.0")
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")

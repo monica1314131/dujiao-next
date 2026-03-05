@@ -21,6 +21,8 @@ const (
 	TaskNotificationDispatch = constants.TaskNotificationDispatch
 	// TaskAffiliateConfirmCommissions 佣金到期确认任务
 	TaskAffiliateConfirmCommissions = constants.TaskAffiliateConfirmCommissions
+	// TaskUpstreamSyncStock 上游库存同步任务
+	TaskUpstreamSyncStock = constants.TaskUpstreamSyncStock
 )
 
 // OrderStatusEmailPayload 订单状态邮件任务载荷
@@ -102,4 +104,9 @@ func NewNotificationDispatchTask(payload NotificationDispatchPayload) (*asynq.Ta
 // NewAffiliateConfirmCommissionsTask 创建佣金到期确认任务
 func NewAffiliateConfirmCommissionsTask() *asynq.Task {
 	return asynq.NewTask(TaskAffiliateConfirmCommissions, nil)
+}
+
+// NewUpstreamSyncStockTask 创建上游库存同步任务
+func NewUpstreamSyncStockTask() *asynq.Task {
+	return asynq.NewTask(TaskUpstreamSyncStock, nil)
 }

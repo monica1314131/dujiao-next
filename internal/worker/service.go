@@ -59,6 +59,15 @@ func registerPeriodicTasks(scheduler *asynq.Scheduler, consumer *Consumer) {
 			logger.Infow("scheduler_register_affiliate_confirm_ok", "entry_id", entryID)
 		}
 	}
+	if consumer.ProductMappingService != nil {
+		task := queue.NewUpstreamSyncStockTask()
+		entryID, err := scheduler.Register("@every 1m", task, asynq.Queue(queue.DefaultQueue))
+		if err != nil {
+			logger.Warnw("scheduler_register_upstream_sync_stock_failed", "error", err)
+		} else {
+			logger.Infow("scheduler_register_upstream_sync_stock_ok", "entry_id", entryID)
+		}
+	}
 }
 
 // Name 服务名称

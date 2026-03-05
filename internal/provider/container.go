@@ -45,6 +45,8 @@ type Container struct {
 	AffiliateRepo         repository.AffiliateRepository
 	ApiCredentialRepo     repository.ApiCredentialRepository
 	SiteConnectionRepo    repository.SiteConnectionRepository
+	ProductMappingRepo    repository.ProductMappingRepository
+	SKUMappingRepo        repository.SKUMappingRepository
 
 	// Services
 	AuthzService          *authz.Service
@@ -74,6 +76,8 @@ type Container struct {
 	NotificationService   *service.NotificationService
 	AffiliateService      *service.AffiliateService
 	ApiCredentialService  *service.ApiCredentialService
+	SiteConnectionService *service.SiteConnectionService
+	ProductMappingService *service.ProductMappingService
 }
 
 // NewContainer 初始化容器
@@ -138,6 +142,8 @@ func (c *Container) initRepositories() {
 	c.AffiliateRepo = repository.NewAffiliateRepository(db)
 	c.ApiCredentialRepo = repository.NewApiCredentialRepository(db)
 	c.SiteConnectionRepo = repository.NewSiteConnectionRepository(db)
+	c.ProductMappingRepo = repository.NewProductMappingRepository(db)
+	c.SKUMappingRepo = repository.NewSKUMappingRepository(db)
 }
 
 func (c *Container) initServices() {
@@ -211,6 +217,8 @@ func (c *Container) initServices() {
 	c.DashboardService = service.NewDashboardService(c.DashboardRepo, c.SettingService)
 	c.NotificationService = service.NewNotificationService(c.SettingService, c.EmailService, c.QueueClient, c.DashboardService, c.Config.TelegramAuth)
 	c.ApiCredentialService = service.NewApiCredentialService(c.ApiCredentialRepo)
+	c.SiteConnectionService = service.NewSiteConnectionService(c.SiteConnectionRepo, c.Config.App.SecretKey, "uploads")
+	c.ProductMappingService = service.NewProductMappingService(c.ProductMappingRepo, c.SKUMappingRepo, c.ProductRepo, c.ProductSKURepo, c.SiteConnectionService)
 	c.PaymentService = service.NewPaymentService(service.PaymentServiceOptions{
 		OrderRepo:           c.OrderRepo,
 		ProductRepo:         c.ProductRepo,
