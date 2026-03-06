@@ -108,6 +108,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		return
 	}
 
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }
 
@@ -137,6 +138,9 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		return
 	}
 
+	for i := range orders {
+		orders[i].MaskUpstreamFulfillmentType()
+	}
 	pagination := response.BuildPagination(page, pageSize, total)
 	response.SuccessWithPage(c, orders, pagination)
 }
@@ -164,6 +168,7 @@ func (h *Handler) GetOrder(c *gin.Context) {
 		return
 	}
 
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }
 
@@ -190,6 +195,7 @@ func (h *Handler) GetOrderByOrderNo(c *gin.Context) {
 		return
 	}
 
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }
 
@@ -219,5 +225,6 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 		return
 	}
 
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }

@@ -198,6 +198,10 @@ func (h *Handler) decoratePublicProduct(product *models.Product, promotionServic
 	}
 
 	item := PublicProductView{Product: *product}
+	// 前台不暴露 upstream 交付类型，对用户显示为 manual
+	if item.Product.FulfillmentType == constants.FulfillmentTypeUpstream {
+		item.Product.FulfillmentType = constants.FulfillmentTypeManual
+	}
 	displayPrice := resolvePublicDisplayPrice(product)
 	item.Product.PriceAmount = displayPrice
 	h.decorateProductStock(product, &item)
@@ -528,6 +532,7 @@ func (h *Handler) CreateGuestOrder(c *gin.Context) {
 		respondGuestOrderCreateError(c, err)
 		return
 	}
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }
 
@@ -595,6 +600,7 @@ func (h *Handler) ListGuestOrders(c *gin.Context) {
 			shared.RespondError(c, response.CodeInternal, "error.order_fetch_failed", err)
 			return
 		}
+		order.MaskUpstreamFulfillmentType()
 		pagination := response.Pagination{
 			Page:      1,
 			PageSize:  1,
@@ -613,6 +619,9 @@ func (h *Handler) ListGuestOrders(c *gin.Context) {
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.order_fetch_failed", err)
 		return
+	}
+	for i := range orders {
+		orders[i].MaskUpstreamFulfillmentType()
 	}
 	pagination := response.BuildPagination(page, pageSize, total)
 	response.SuccessWithPage(c, orders, pagination)
@@ -644,6 +653,7 @@ func (h *Handler) GetGuestOrder(c *gin.Context) {
 		shared.RespondError(c, response.CodeInternal, "error.order_fetch_failed", err)
 		return
 	}
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }
 
@@ -673,6 +683,7 @@ func (h *Handler) GetGuestOrderByOrderNo(c *gin.Context) {
 		shared.RespondError(c, response.CodeInternal, "error.order_fetch_failed", err)
 		return
 	}
+	order.MaskUpstreamFulfillmentType()
 	response.Success(c, order)
 }
 

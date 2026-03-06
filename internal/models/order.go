@@ -46,3 +46,21 @@ type Order struct {
 func (Order) TableName() string {
 	return "orders"
 }
+
+// MaskUpstreamFulfillmentType 将订单及子订单中的 upstream 交付类型替换为 manual，
+// 避免前台用户感知到上游对接的存在。
+func (o *Order) MaskUpstreamFulfillmentType() {
+	const upstream = "upstream"
+	const manual = "manual"
+	for i := range o.Items {
+		if o.Items[i].FulfillmentType == upstream {
+			o.Items[i].FulfillmentType = manual
+		}
+	}
+	if o.Fulfillment != nil && o.Fulfillment.Type == upstream {
+		o.Fulfillment.Type = manual
+	}
+	for i := range o.Children {
+		o.Children[i].MaskUpstreamFulfillmentType()
+	}
+}

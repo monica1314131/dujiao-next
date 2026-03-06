@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/http/response"
 	"github.com/dujiao-next/internal/models"
@@ -74,6 +75,14 @@ func (h *Handler) GetCart(c *gin.Context) {
 		if item.Product == nil {
 			continue
 		}
+		productFT := item.Product.FulfillmentType
+		if productFT == constants.FulfillmentTypeUpstream {
+			productFT = constants.FulfillmentTypeManual
+		}
+		cartFT := item.FulfillmentType
+		if cartFT == constants.FulfillmentTypeUpstream {
+			cartFT = constants.FulfillmentTypeManual
+		}
 		product := CartProduct{
 			ID:              item.Product.ID,
 			Slug:            item.Product.Slug,
@@ -82,14 +91,14 @@ func (h *Handler) GetCart(c *gin.Context) {
 			Images:          item.Product.Images,
 			Tags:            item.Product.Tags,
 			PurchaseType:    item.Product.PurchaseType,
-			FulfillmentType: item.Product.FulfillmentType,
+			FulfillmentType: productFT,
 			IsActive:        item.Product.IsActive,
 		}
 		respItems = append(respItems, CartItemResponse{
 			ProductID:       item.ProductID,
 			SKUID:           item.SKUID,
 			Quantity:        item.Quantity,
-			FulfillmentType: item.FulfillmentType,
+			FulfillmentType: cartFT,
 			UnitPrice:       item.UnitPrice,
 			OriginalPrice:   item.OriginalPrice,
 			Currency:        item.Currency,
