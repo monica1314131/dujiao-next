@@ -94,8 +94,8 @@ func TelegramBotConfigDefault() TelegramBotConfigSetting {
 					Action: TelegramBotMenuAction{Type: "builtin", Value: ""},
 				},
 				{
-					Key: "help", Enabled: true, Order: 3,
-					Label:  LocalizedText{"zh-CN": "❓ 帮助", "zh-TW": "❓ 幫助", "en-US": "❓ Help"},
+					Key: "contact_support", Enabled: true, Order: 3,
+					Label:  LocalizedText{"zh-CN": "❓ 帮助中心", "zh-TW": "❓ 幫助中心", "en-US": "❓ Help"},
 					Action: TelegramBotMenuAction{Type: "builtin", Value: ""},
 				},
 			},
