@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/telegramidentity"
 )
 
 func TestBuildTelegramPlaceholderEmail(t *testing.T) {
-	email := buildTelegramPlaceholderEmail("123456")
+	email := telegramidentity.BuildPlaceholderEmail("123456")
 	if email != "telegram_123456@login.local" {
 		t.Fatalf("unexpected placeholder email: %s", email)
 	}
@@ -28,7 +29,7 @@ func TestIsTelegramPlaceholderEmail(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			actual := isTelegramPlaceholderEmail(tc.email)
+			actual := telegramidentity.IsPlaceholderEmail(tc.email)
 			if actual != tc.expected {
 				t.Fatalf("isTelegramPlaceholderEmail(%q) = %v, want %v", tc.email, actual, tc.expected)
 			}

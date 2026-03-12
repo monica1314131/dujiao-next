@@ -45,8 +45,8 @@ type adminWalletRechargeItem struct {
 
 // GetAdminUserWallet 管理端获取用户钱包信息
 func (h *Handler) GetAdminUserWallet(c *gin.Context) {
-	userID, ok := parsePathUint(c, "id")
-	if !ok {
+	userID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.user_id_invalid", nil)
 		return
 	}
@@ -72,8 +72,8 @@ func (h *Handler) GetAdminUserWallet(c *gin.Context) {
 
 // GetAdminUserWalletTransactions 管理端获取用户钱包流水
 func (h *Handler) GetAdminUserWalletTransactions(c *gin.Context) {
-	userID, ok := parsePathUint(c, "id")
-	if !ok {
+	userID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.user_id_invalid", nil)
 		return
 	}
@@ -103,17 +103,17 @@ func (h *Handler) GetAdminWalletRecharges(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	page, pageSize = shared.NormalizePagination(page, pageSize)
 
-	userID, err := parseQueryUint(c.Query("user_id"))
+	userID, err := shared.ParseQueryUint(c.Query("user_id"), false)
 	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
 		return
 	}
-	paymentID, err := parseQueryUint(c.Query("payment_id"))
+	paymentID, err := shared.ParseQueryUint(c.Query("payment_id"), false)
 	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
 		return
 	}
-	channelID, err := parseQueryUint(c.Query("channel_id"))
+	channelID, err := shared.ParseQueryUint(c.Query("channel_id"), false)
 	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
 		return
@@ -246,8 +246,8 @@ func (h *Handler) GetAdminWalletRecharges(c *gin.Context) {
 
 // AdjustAdminUserWallet 管理端增减用户余额
 func (h *Handler) AdjustAdminUserWallet(c *gin.Context) {
-	userID, ok := parsePathUint(c, "id")
-	if !ok {
+	userID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.user_id_invalid", nil)
 		return
 	}
@@ -311,8 +311,8 @@ func (h *Handler) AdjustAdminUserWallet(c *gin.Context) {
 
 // AdminRefundOrderToWallet 管理端订单退款到余额
 func (h *Handler) AdminRefundOrderToWallet(c *gin.Context) {
-	orderID, ok := parsePathUint(c, "id")
-	if !ok {
+	orderID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.order_item_invalid", nil)
 		return
 	}
@@ -349,28 +349,4 @@ func (h *Handler) AdminRefundOrderToWallet(c *gin.Context) {
 		"order":       order,
 		"transaction": txn,
 	})
-}
-
-func parsePathUint(c *gin.Context, key string) (uint, bool) {
-	raw := strings.TrimSpace(c.Param(key))
-	if raw == "" {
-		return 0, false
-	}
-	parsed, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil || parsed == 0 {
-		return 0, false
-	}
-	return uint(parsed), true
-}
-
-func parseQueryUint(raw string) (uint, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return 0, nil
-	}
-	parsed, err := strconv.ParseUint(trimmed, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	return uint(parsed), nil
 }

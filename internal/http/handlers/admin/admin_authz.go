@@ -2,7 +2,6 @@ package admin
 
 import (
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/dujiao-next/internal/http/handlers/shared"
@@ -114,18 +113,18 @@ func (h *Handler) CreateAuthzRole(c *gin.Context) {
 	}
 
 	h.recordAuthzAudit(c, service.AuthzAuditRecordInput{
-		OperatorAdminID:  currentAdminID(c),
-		OperatorUsername: currentUsername(c),
+		OperatorAdminID:  shared.GetContextUintOrZero(c, "admin_id"),
+		OperatorUsername: shared.GetContextString(c, "username"),
 		Action:           "role_create",
 		Role:             role,
-		RequestID:        currentRequestID(c),
+		RequestID:        shared.GetContextString(c, "request_id"),
 		Detail: models.JSON{
 			"role": role,
 		},
 	})
 
 	logger.Infow("admin_authz_role_created",
-		"operator_admin_id", currentAdminID(c),
+		"operator_admin_id", shared.GetContextUintOrZero(c, "admin_id"),
 		"role", role,
 	)
 
@@ -146,18 +145,18 @@ func (h *Handler) DeleteAuthzRole(c *gin.Context) {
 	}
 
 	h.recordAuthzAudit(c, service.AuthzAuditRecordInput{
-		OperatorAdminID:  currentAdminID(c),
-		OperatorUsername: currentUsername(c),
+		OperatorAdminID:  shared.GetContextUintOrZero(c, "admin_id"),
+		OperatorUsername: shared.GetContextString(c, "username"),
 		Action:           "role_delete",
 		Role:             role,
-		RequestID:        currentRequestID(c),
+		RequestID:        shared.GetContextString(c, "request_id"),
 		Detail: models.JSON{
 			"role": role,
 		},
 	})
 
 	logger.Infow("admin_authz_role_deleted",
-		"operator_admin_id", currentAdminID(c),
+		"operator_admin_id", shared.GetContextUintOrZero(c, "admin_id"),
 		"role", role,
 	)
 
@@ -194,13 +193,13 @@ func (h *Handler) GrantAuthzPolicy(c *gin.Context) {
 	}
 
 	h.recordAuthzAudit(c, service.AuthzAuditRecordInput{
-		OperatorAdminID:  currentAdminID(c),
-		OperatorUsername: currentUsername(c),
+		OperatorAdminID:  shared.GetContextUintOrZero(c, "admin_id"),
+		OperatorUsername: shared.GetContextString(c, "username"),
 		Action:           "policy_grant",
 		Role:             req.Role,
 		Object:           req.Object,
 		Method:           req.Action,
-		RequestID:        currentRequestID(c),
+		RequestID:        shared.GetContextString(c, "request_id"),
 		Detail: models.JSON{
 			"role":   req.Role,
 			"object": req.Object,
@@ -209,7 +208,7 @@ func (h *Handler) GrantAuthzPolicy(c *gin.Context) {
 	})
 
 	logger.Infow("admin_authz_policy_granted",
-		"operator_admin_id", currentAdminID(c),
+		"operator_admin_id", shared.GetContextUintOrZero(c, "admin_id"),
 		"role", req.Role,
 		"object", req.Object,
 		"action", req.Action,
@@ -232,13 +231,13 @@ func (h *Handler) RevokeAuthzPolicy(c *gin.Context) {
 	}
 
 	h.recordAuthzAudit(c, service.AuthzAuditRecordInput{
-		OperatorAdminID:  currentAdminID(c),
-		OperatorUsername: currentUsername(c),
+		OperatorAdminID:  shared.GetContextUintOrZero(c, "admin_id"),
+		OperatorUsername: shared.GetContextString(c, "username"),
 		Action:           "policy_revoke",
 		Role:             req.Role,
 		Object:           req.Object,
 		Method:           req.Action,
-		RequestID:        currentRequestID(c),
+		RequestID:        shared.GetContextString(c, "request_id"),
 		Detail: models.JSON{
 			"role":   req.Role,
 			"object": req.Object,
@@ -247,7 +246,7 @@ func (h *Handler) RevokeAuthzPolicy(c *gin.Context) {
 	})
 
 	logger.Infow("admin_authz_policy_revoked",
-		"operator_admin_id", currentAdminID(c),
+		"operator_admin_id", shared.GetContextUintOrZero(c, "admin_id"),
 		"role", req.Role,
 		"object", req.Object,
 		"action", req.Action,
@@ -303,12 +302,12 @@ func (h *Handler) SetAuthzAdminRoles(c *gin.Context) {
 	}
 
 	h.recordAuthzAudit(c, service.AuthzAuditRecordInput{
-		OperatorAdminID:  currentAdminID(c),
-		OperatorUsername: currentUsername(c),
+		OperatorAdminID:  shared.GetContextUintOrZero(c, "admin_id"),
+		OperatorUsername: shared.GetContextString(c, "username"),
 		TargetAdminID:    &adminID,
 		TargetUsername:   admin.Username,
 		Action:           "admin_roles_update",
-		RequestID:        currentRequestID(c),
+		RequestID:        shared.GetContextString(c, "request_id"),
 		Detail: models.JSON{
 			"target_admin_id": adminID,
 			"target_username": admin.Username,
@@ -317,7 +316,7 @@ func (h *Handler) SetAuthzAdminRoles(c *gin.Context) {
 	})
 
 	logger.Infow("admin_authz_admin_roles_updated",
-		"operator_admin_id", currentAdminID(c),
+		"operator_admin_id", shared.GetContextUintOrZero(c, "admin_id"),
 		"target_admin_id", adminID,
 		"roles", req.Roles,
 	)
@@ -342,12 +341,12 @@ func (h *Handler) recordAuthzAudit(c *gin.Context, input service.AuthzAuditRecor
 }
 
 func parseAdminIDParam(c *gin.Context) (uint, bool) {
-	id, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
-	if err != nil || id == 0 {
+	id, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.admin_id_invalid", nil)
 		return 0, false
 	}
-	return uint(id), true
+	return id, true
 }
 
 func decodeRoleParam(value string) string {
@@ -356,46 +355,4 @@ func decodeRoleParam(value string) string {
 		return strings.TrimSpace(value)
 	}
 	return strings.TrimSpace(decoded)
-}
-
-func currentAdminID(c *gin.Context) uint {
-	value, exists := c.Get("admin_id")
-	if !exists {
-		return 0
-	}
-	switch adminID := value.(type) {
-	case uint:
-		return adminID
-	case int:
-		if adminID > 0 {
-			return uint(adminID)
-		}
-	case float64:
-		if adminID > 0 {
-			return uint(adminID)
-		}
-	}
-	return 0
-}
-
-func currentUsername(c *gin.Context) string {
-	value, exists := c.Get("username")
-	if !exists {
-		return ""
-	}
-	if username, ok := value.(string); ok {
-		return strings.TrimSpace(username)
-	}
-	return ""
-}
-
-func currentRequestID(c *gin.Context) string {
-	value, exists := c.Get("request_id")
-	if !exists {
-		return ""
-	}
-	if requestID, ok := value.(string); ok {
-		return strings.TrimSpace(requestID)
-	}
-	return ""
 }

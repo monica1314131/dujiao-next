@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dujiao-next/internal/constants"
+	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/provider"
 	"github.com/dujiao-next/internal/repository"
@@ -374,7 +375,7 @@ func TestParseAdminPaymentQueryUint(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/admin/payments?user_id=12", nil)
 
-	parsed, err := parseAdminPaymentQueryUint(c, "user_id")
+	parsed, err := shared.ParseQueryUint(c.Query("user_id"), true)
 	if err != nil {
 		t.Fatalf("parse user_id failed: %v", err)
 	}
@@ -385,7 +386,7 @@ func TestParseAdminPaymentQueryUint(t *testing.T) {
 	w, c = httptest.NewRecorder(), nil
 	c, _ = gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/admin/payments?user_id=0", nil)
-	_, err = parseAdminPaymentQueryUint(c, "user_id")
+	_, err = shared.ParseQueryUint(c.Query("user_id"), true)
 	if err == nil {
 		t.Fatalf("expected parse error for user_id=0")
 	}
@@ -393,7 +394,7 @@ func TestParseAdminPaymentQueryUint(t *testing.T) {
 	w, c = httptest.NewRecorder(), nil
 	c, _ = gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/admin/payments", nil)
-	parsed, err = parseAdminPaymentQueryUint(c, "user_id")
+	parsed, err = shared.ParseQueryUint(c.Query("user_id"), true)
 	if err != nil {
 		t.Fatalf("unexpected error for empty query: %v", err)
 	}

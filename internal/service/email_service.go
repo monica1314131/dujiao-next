@@ -13,6 +13,7 @@ import (
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/i18n"
 	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/telegramidentity"
 )
 
 // EmailService 邮件发送服务
@@ -69,7 +70,7 @@ func (s *EmailService) SendCustomEmail(toEmail, subject, body string) error {
 }
 
 func (s *EmailService) sendTextEmail(toEmail, subject, body string) error {
-	if isTelegramPlaceholderEmail(toEmail) {
+	if telegramidentity.IsPlaceholderEmail(toEmail) {
 		return nil
 	}
 	if s.cfg == nil || !s.cfg.Enabled {

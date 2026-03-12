@@ -17,6 +17,7 @@ import (
 	"github.com/dujiao-next/internal/provider"
 	"github.com/dujiao-next/internal/queue"
 	"github.com/dujiao-next/internal/service"
+	"github.com/dujiao-next/internal/telegramidentity"
 	"github.com/dujiao-next/internal/upstream"
 
 	"github.com/hibiken/asynq"
@@ -99,7 +100,7 @@ func (c *Consumer) handleOrderStatusEmail(_ context.Context, task *asynq.Task) e
 		logger.Debugw("worker_order_status_email_skip_empty_receiver", "order_id", order.ID, "order_no", order.OrderNo)
 		return nil
 	}
-	if isTelegramPlaceholderReceiver(receiverEmail) {
+	if telegramidentity.IsPlaceholderEmail(receiverEmail) {
 		logger.Debugw("worker_order_status_email_skip_placeholder_receiver", "order_id", order.ID, "order_no", order.OrderNo)
 		return nil
 	}
@@ -398,14 +399,6 @@ func (c *Consumer) handleReconciliationRun(ctx context.Context, task *asynq.Task
 		return err
 	}
 	return nil
-}
-
-func isTelegramPlaceholderReceiver(email string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(email))
-	if normalized == "" {
-		return false
-	}
-	return strings.HasPrefix(normalized, "telegram_") && strings.HasSuffix(normalized, "@login.local")
 }
 
 func buildOrderFulfillmentEmailPayload(order *models.Order) string {

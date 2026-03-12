@@ -200,8 +200,8 @@ func (h *Handler) GetGiftCards(c *gin.Context) {
 
 // UpdateGiftCard 更新礼品卡
 func (h *Handler) UpdateGiftCard(c *gin.Context) {
-	id, ok := parsePathUint(c, "id")
-	if !ok {
+	id, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
 		return
 	}
@@ -248,8 +248,8 @@ func (h *Handler) UpdateGiftCard(c *gin.Context) {
 
 // DeleteGiftCard 删除礼品卡
 func (h *Handler) DeleteGiftCard(c *gin.Context) {
-	id, ok := parsePathUint(c, "id")
-	if !ok {
+	id, err := shared.ParseParamUint(c, "id")
+	if err != nil {
 		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
 		return
 	}

@@ -187,31 +187,16 @@ func formatTimeNullable(raw *time.Time) string {
 	return raw.Format(time.RFC3339)
 }
 
-func parseAdminPaymentQueryUint(c *gin.Context, key string) (uint, error) {
-	raw := strings.TrimSpace(c.Query(key))
-	if raw == "" {
-		return 0, nil
-	}
-	parsed, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	if parsed == 0 {
-		return 0, errors.New("invalid query value")
-	}
-	return uint(parsed), nil
-}
-
 func buildAdminPaymentFilter(c *gin.Context, page, pageSize int) (repository.PaymentListFilter, error) {
-	orderID, err := parseAdminPaymentQueryUint(c, "order_id")
+	orderID, err := shared.ParseQueryUint(c.Query("order_id"), true)
 	if err != nil {
 		return repository.PaymentListFilter{}, err
 	}
-	userID, err := parseAdminPaymentQueryUint(c, "user_id")
+	userID, err := shared.ParseQueryUint(c.Query("user_id"), true)
 	if err != nil {
 		return repository.PaymentListFilter{}, err
 	}
-	channelID, err := parseAdminPaymentQueryUint(c, "channel_id")
+	channelID, err := shared.ParseQueryUint(c.Query("channel_id"), true)
 	if err != nil {
 		return repository.PaymentListFilter{}, err
 	}

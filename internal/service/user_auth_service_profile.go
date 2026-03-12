@@ -8,6 +8,7 @@ import (
 	"github.com/dujiao-next/internal/cache"
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/telegramidentity"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -259,7 +260,7 @@ func (s *UserAuthService) ResolveEmailChangeMode(user *models.User) (string, err
 	if err := s.ensureTelegramVirtualEmailState(user); err != nil {
 		return "", err
 	}
-	if isTelegramPlaceholderEmail(user.Email) {
+	if telegramidentity.IsPlaceholderEmail(user.Email) {
 		return EmailChangeModeBindOnly, nil
 	}
 	return EmailChangeModeChangeWithOldAndNew, nil
@@ -280,7 +281,7 @@ func (s *UserAuthService) ResolvePasswordChangeMode(user *models.User) (string, 
 }
 
 func (s *UserAuthService) ensureTelegramVirtualEmailState(user *models.User) error {
-	if user == nil || !isTelegramPlaceholderEmail(user.Email) {
+	if user == nil || !telegramidentity.IsPlaceholderEmail(user.Email) {
 		return nil
 	}
 	updated := false

@@ -9,6 +9,7 @@ import (
 	"github.com/dujiao-next/internal/cache"
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/telegramidentity"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -316,7 +317,7 @@ func (s *UserAuthService) provisionTelegramChannelIdentity(verified *TelegramIde
 		return user, identity, false, nil
 	}
 
-	placeholderUser, err := s.userRepo.GetByEmail(buildTelegramPlaceholderEmail(verified.ProviderUserID))
+	placeholderUser, err := s.userRepo.GetByEmail(telegramidentity.BuildPlaceholderEmail(verified.ProviderUserID))
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -408,7 +409,7 @@ func (s *UserAuthService) bindTelegramIdentityToUser(targetUser *models.User, ve
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		if previousUser == nil || !isTelegramPlaceholderEmail(previousUser.Email) {
+		if previousUser == nil || !telegramidentity.IsPlaceholderEmail(previousUser.Email) {
 			return nil, nil, 0, ErrUserOAuthIdentityExists
 		}
 
@@ -456,7 +457,7 @@ func (s *UserAuthService) findOrCreateTelegramUser(verified *TelegramIdentityVer
 	if verified == nil {
 		return nil, ErrTelegramAuthPayloadInvalid
 	}
-	email := buildTelegramPlaceholderEmail(verified.ProviderUserID)
+	email := telegramidentity.BuildPlaceholderEmail(verified.ProviderUserID)
 	user, err := s.userRepo.GetByEmail(email)
 	if err != nil {
 		return nil, err
@@ -483,7 +484,7 @@ func (s *UserAuthService) findOrCreateTelegramUser(verified *TelegramIdentityVer
 		Email:                 email,
 		PasswordHash:          string(hashedPassword),
 		PasswordSetupRequired: true,
-		DisplayName:           resolveTelegramDisplayName(verified),
+		DisplayName:           telegramidentity.ResolveDisplayName(verified.ProviderUserID, verified.Username, verified.FirstName, verified.LastName),
 		Status:                constants.UserStatusActive,
 		LastLoginAt:           &now,
 		CreatedAt:             now,
@@ -522,40 +523,6 @@ func applyTelegramIdentity(verified *TelegramIdentityVerified, identity *models.
 		changed = true
 	}
 	return changed
-}
-
-func buildTelegramPlaceholderEmail(providerUserID string) string {
-	normalizedID := strings.TrimSpace(providerUserID)
-	if normalizedID == "" {
-		normalizedID = "unknown"
-	}
-	return fmt.Sprintf("%s%s%s", telegramPlaceholderEmailPrefix, normalizedID, telegramPlaceholderEmailDomain)
-}
-
-func isTelegramPlaceholderEmail(email string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(email))
-	if normalized == "" {
-		return false
-	}
-	return strings.HasPrefix(normalized, telegramPlaceholderEmailPrefix) &&
-		strings.HasSuffix(normalized, telegramPlaceholderEmailDomain)
-}
-
-func resolveTelegramDisplayName(verified *TelegramIdentityVerified) string {
-	if verified == nil {
-		return "Telegram User"
-	}
-	fullName := strings.TrimSpace(strings.TrimSpace(verified.FirstName) + " " + strings.TrimSpace(verified.LastName))
-	if fullName != "" {
-		return fullName
-	}
-	if strings.TrimSpace(verified.Username) != "" {
-		return verified.Username
-	}
-	if strings.TrimSpace(verified.ProviderUserID) != "" {
-		return fmt.Sprintf("telegram_%s", strings.TrimSpace(verified.ProviderUserID))
-	}
-	return "Telegram User"
 }
 
 func normalizeTelegramChannelIdentityInput(input TelegramChannelIdentityInput) (*TelegramIdentityVerified, error) {

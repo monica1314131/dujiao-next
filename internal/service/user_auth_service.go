@@ -66,8 +66,6 @@ const (
 	PasswordChangeModeSetWithoutOld = "set_without_old"
 	// PasswordChangeModeChangeWithOld 表示修改密码，需要旧密码
 	PasswordChangeModeChangeWithOld = "change_with_old"
-	telegramPlaceholderEmailPrefix  = "telegram_"
-	telegramPlaceholderEmailDomain  = "@login.local"
 )
 
 // GenerateUserJWT 生成用户 JWT Token
