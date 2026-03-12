@@ -217,6 +217,7 @@ func (h *Handler) GetPaymentChannels(c *gin.Context) {
 		ChannelType     string `json:"channel_type"`
 		InteractionMode string `json:"interaction_mode"`
 		FeeRate         string `json:"fee_rate"`
+		FixedFee        string `json:"fixed_fee"`
 	}
 
 	items := make([]channelItem, 0, len(channels))
@@ -231,6 +232,7 @@ func (h *Handler) GetPaymentChannels(c *gin.Context) {
 			ChannelType:     ch.ChannelType,
 			InteractionMode: ch.InteractionMode,
 			FeeRate:         ch.FeeRate.StringFixed(2),
+			FixedFee:        ch.FixedFee.StringFixed(2),
 		})
 	}
 

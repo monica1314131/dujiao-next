@@ -16,6 +16,7 @@ type Payment struct {
 	InteractionMode string         `gorm:"not null" json:"interaction_mode"`                        // 交互方式（qr/redirect）
 	Amount          Money          `gorm:"type:decimal(20,2);not null" json:"amount"`               // 支付金额（含手续费）
 	FeeRate         Money          `gorm:"type:decimal(6,2);not null;default:0" json:"fee_rate"`    // 手续费比例（百分比）
+	FixedFee        Money          `gorm:"type:decimal(6,2);not null;default:0" json:"fixed_fee"`   // 固定手续费
 	FeeAmount       Money          `gorm:"type:decimal(20,2);not null;default:0" json:"fee_amount"` // 手续费金额
 	Currency        string         `gorm:"not null" json:"currency"`                                // 币种
 	Status          string         `gorm:"index;not null" json:"status"`                            // 支付状态

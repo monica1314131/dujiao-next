@@ -21,6 +21,7 @@ type CreatePaymentChannelRequest struct {
 	ChannelType     string                 `json:"channel_type" binding:"required"`
 	InteractionMode string                 `json:"interaction_mode" binding:"required"`
 	FeeRate         *models.Money          `json:"fee_rate"`
+	FixedFee        *models.Money          `json:"fixed_fee"`
 	ConfigJSON      map[string]interface{} `json:"config_json"`
 	IsActive        *bool                  `json:"is_active"`
 	SortOrder       int                    `json:"sort_order"`
@@ -48,6 +49,9 @@ func (h *Handler) CreatePaymentChannel(c *gin.Context) {
 	}
 	if req.FeeRate != nil {
 		channel.FeeRate = *req.FeeRate
+	}
+	if req.FixedFee != nil {
+		channel.FixedFee = *req.FixedFee
 	}
 
 	if err := h.PaymentService.ValidateChannel(channel); err != nil {
@@ -78,6 +82,7 @@ type UpdatePaymentChannelRequest struct {
 	ChannelType     string                 `json:"channel_type"`
 	InteractionMode string                 `json:"interaction_mode"`
 	FeeRate         *models.Money          `json:"fee_rate"`
+	FixedFee        *models.Money          `json:"fixed_fee"`
 	ConfigJSON      map[string]interface{} `json:"config_json"`
 	IsActive        *bool                  `json:"is_active"`
 	SortOrder       *int                   `json:"sort_order"`
@@ -122,6 +127,9 @@ func (h *Handler) UpdatePaymentChannel(c *gin.Context) {
 	}
 	if req.FeeRate != nil {
 		channel.FeeRate = *req.FeeRate
+	}
+	if req.FixedFee != nil {
+		channel.FixedFee = *req.FixedFee
 	}
 	if req.ConfigJSON != nil {
 		channel.ConfigJSON = models.JSON(req.ConfigJSON)

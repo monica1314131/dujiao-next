@@ -97,6 +97,7 @@ func (h *Handler) GetConfig(c *gin.Context) {
 			"channel_type":     channel.ChannelType,
 			"interaction_mode": channel.InteractionMode,
 			"fee_rate":         channel.FeeRate,
+			"fixed_fee":        channel.FixedFee,
 		})
 	}
 	data["payment_channels"] = publicChannels
