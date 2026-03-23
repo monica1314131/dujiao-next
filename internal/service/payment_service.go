@@ -94,11 +94,14 @@ func NewPaymentService(opts PaymentServiceOptions) *PaymentService {
 
 // CreatePaymentInput 创建支付请求
 type CreatePaymentInput struct {
-	OrderID    uint
-	ChannelID  uint
-	UseBalance bool
-	ClientIP   string
-	Context    context.Context
+	OrderID          uint
+	ChannelID        uint
+	UseBalance       bool
+	ClientIP         string
+	Context          context.Context
+	ReturnBizType    string
+	ReturnBusinessNo string
+	ReturnGuest      bool
 }
 
 // CreatePaymentResult 创建支付结果
@@ -564,9 +567,11 @@ func (s *PaymentService) CreateWalletRechargePayment(input CreateWalletRechargeP
 		UserID:  recharge.UserID,
 	}
 	if err := s.applyProviderPayment(CreatePaymentInput{
-		ChannelID: input.ChannelID,
-		ClientIP:  input.ClientIP,
-		Context:   input.Context,
+		ChannelID:        input.ChannelID,
+		ClientIP:         input.ClientIP,
+		Context:          input.Context,
+		ReturnBizType:    "recharge",
+		ReturnBusinessNo: recharge.RechargeNo,
 	}, virtualOrder, channel, payment); err != nil {
 		_ = s.paymentRepo.Transaction(func(tx *gorm.DB) error {
 			rechargeRepo := s.walletRepo.WithTx(tx)
@@ -729,13 +734,38 @@ func matchesBusinessOrderNo(callbackOrderNo string, businessOrderNo string, paym
 	return callbackOrderNo == strings.TrimSpace(payment.GatewayOrderNo)
 }
 
-func buildOrderReturnQuery(order *models.Order, marker string, sessionID string) map[string]string {
+func buildPaymentReturnQuery(input CreatePaymentInput, order *models.Order, marker string, sessionID string) map[string]string {
 	params := map[string]string{}
+
+	bizType := strings.ToLower(strings.TrimSpace(input.ReturnBizType))
+	businessNo := strings.TrimSpace(input.ReturnBusinessNo)
+	isGuest := input.ReturnGuest
+
+	if bizType == "" {
+		bizType = "order"
+	}
 	if order != nil {
-		if orderNo := strings.TrimSpace(order.OrderNo); orderNo != "" {
-			params["order_no"] = orderNo
+		if businessNo == "" {
+			businessNo = strings.TrimSpace(order.OrderNo)
 		}
-		if order.UserID == 0 {
+		if !isGuest && order.UserID == 0 && bizType == "order" {
+			isGuest = true
+		}
+	}
+
+	if bizType != "" {
+		params["biz_type"] = bizType
+	}
+	switch bizType {
+	case "recharge":
+		if businessNo != "" {
+			params["recharge_no"] = businessNo
+		}
+	default:
+		if businessNo != "" {
+			params["order_no"] = businessNo
+		}
+		if isGuest {
 			params["guest"] = "1"
 		}
 	}

@@ -58,7 +58,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 			return fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 		}
 		notifyURL := strings.TrimSpace(cfg.NotifyURL)
-		returnURL := appendURLQuery(cfg.ReturnURL, buildOrderReturnQuery(order, "epay_return", ""))
+		returnURL := appendURLQuery(cfg.ReturnURL, buildPaymentReturnQuery(input, order, "epay_return", ""))
 		subject := buildOrderSubject(order)
 		param := strconv.FormatUint(uint64(payment.ID), 10)
 		createInput := epay.CreateInput{
@@ -143,7 +143,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 		if notifyURL == "" || returnURL == "" {
 			return fmt.Errorf("%w: notify_url/return_url is required", ErrPaymentChannelConfigInvalid)
 		}
-		returnURL = appendURLQuery(returnURL, buildOrderReturnQuery(order, "epusdt_return", ""))
+		returnURL = appendURLQuery(returnURL, buildPaymentReturnQuery(input, order, "epusdt_return", ""))
 		subject := buildOrderSubject(order)
 		result, err := epusdt.CreatePayment(gatewayCtx, cfg, epusdt.CreateInput{
 			OrderNo:   providerOrderNo,
@@ -192,7 +192,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 		if err := okpay.ValidateConfig(cfg); err != nil {
 			return fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 		}
-		returnURL := appendURLQuery(strings.TrimSpace(cfg.ReturnURL), buildOrderReturnQuery(order, "okpay_return", ""))
+		returnURL := appendURLQuery(strings.TrimSpace(cfg.ReturnURL), buildPaymentReturnQuery(input, order, "okpay_return", ""))
 		createResult, err := okpay.CreatePayment(gatewayCtx, cfg, okpay.CreateInput{
 			UniqueID:    providerOrderNo,
 			Name:        buildOrderSubject(order),
@@ -247,7 +247,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 		}
 		redirectURL := strings.TrimSpace(cfg.RedirectURL)
 		if redirectURL != "" {
-			redirectURL = appendURLQuery(redirectURL, buildOrderReturnQuery(order, "tokenpay_return", ""))
+			redirectURL = appendURLQuery(redirectURL, buildPaymentReturnQuery(input, order, "tokenpay_return", ""))
 		}
 		createResult, err := tokenpay.CreatePayment(gatewayCtx, cfg, tokenpay.CreateInput{
 			OutOrderID:      providerOrderNo,
@@ -299,8 +299,8 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 				Amount:      payment.Amount.String(),
 				Currency:    payment.Currency,
 				Description: buildOrderSubject(order),
-				ReturnURL:   appendURLQuery(cfg.ReturnURL, buildOrderReturnQuery(order, "pp_return", "")),
-				CancelURL:   appendURLQuery(cfg.CancelURL, buildOrderReturnQuery(order, "pp_cancel", "")),
+				ReturnURL:   appendURLQuery(cfg.ReturnURL, buildPaymentReturnQuery(input, order, "pp_return", "")),
+				CancelURL:   appendURLQuery(cfg.CancelURL, buildPaymentReturnQuery(input, order, "pp_cancel", "")),
 			})
 			if err != nil {
 				switch {
@@ -341,7 +341,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 				Amount:         payment.Amount.String(),
 				Subject:        buildOrderSubject(order),
 				NotifyURL:      cfg.NotifyURL,
-				ReturnURL:      appendURLQuery(cfg.ReturnURL, buildOrderReturnQuery(order, "alipay_return", "")),
+				ReturnURL:      appendURLQuery(cfg.ReturnURL, buildPaymentReturnQuery(input, order, "alipay_return", "")),
 				PassbackParams: strconv.FormatUint(uint64(payment.ID), 10),
 			}, channel.InteractionMode)
 			if err != nil {
@@ -378,7 +378,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 				return fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 			}
 			cfgForCreate := *cfg
-			cfgForCreate.H5RedirectURL = appendURLQuery(cfg.H5RedirectURL, buildOrderReturnQuery(order, "wechat_return", ""))
+			cfgForCreate.H5RedirectURL = appendURLQuery(cfg.H5RedirectURL, buildPaymentReturnQuery(input, order, "wechat_return", ""))
 			createResult, err := wechatpay.CreatePayment(gatewayCtx, &cfgForCreate, wechatpay.CreateInput{
 				OrderNo:     order.OrderNo,
 				PaymentID:   payment.ID,
@@ -426,8 +426,8 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 				Amount:      payment.Amount.String(),
 				Currency:    payment.Currency,
 				Description: buildOrderSubject(order),
-				SuccessURL:  appendURLQuery(cfg.SuccessURL, buildOrderReturnQuery(order, "stripe_return", "{CHECKOUT_SESSION_ID}")),
-				CancelURL:   appendURLQuery(cfg.CancelURL, buildOrderReturnQuery(order, "stripe_cancel", "")),
+				SuccessURL:  appendURLQuery(cfg.SuccessURL, buildPaymentReturnQuery(input, order, "stripe_return", "{CHECKOUT_SESSION_ID}")),
+				CancelURL:   appendURLQuery(cfg.CancelURL, buildPaymentReturnQuery(input, order, "stripe_cancel", "")),
 			})
 			if err != nil {
 				return mapStripeGatewayError(err)
