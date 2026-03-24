@@ -217,11 +217,6 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 	return mapping, nil
 }
 
-// createSKUMappings 根据本地和上游 SKU 建立映射
-func (s *ProductMappingService) createSKUMappings(mappingID uint, localSKUs []models.ProductSKU, upstreamSKUs []upstream.UpstreamSKU) error {
-	return createSKUMappingsWithRepo(s.skuMappingRepo, mappingID, localSKUs, upstreamSKUs)
-}
-
 func createSKUMappingsWithRepo(
 	skuMappingRepo repository.SKUMappingRepository,
 	mappingID uint,

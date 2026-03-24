@@ -21,7 +21,6 @@ import (
 
 const (
 	createOrderPath = "/CreateOrder"
-	queryOrderPath  = "/Query"
 	DefaultCurrency = "USDT"
 )
 
@@ -109,26 +108,6 @@ func ValidateConfig(cfg *Config) error {
 		return fmt.Errorf("%w: currency is required", ErrConfigInvalid)
 	}
 	return nil
-}
-
-func IsSupportedChannelType(channelType string) bool {
-	switch strings.ToLower(strings.TrimSpace(channelType)) {
-	case constants.PaymentChannelTypeUsdt, constants.PaymentChannelTypeUsdtTrc20, constants.PaymentChannelTypeTrx:
-		return true
-	default:
-		return false
-	}
-}
-
-func ResolveCurrency(channelType string) string {
-	switch strings.ToLower(strings.TrimSpace(channelType)) {
-	case constants.PaymentChannelTypeUsdt, constants.PaymentChannelTypeUsdtTrc20:
-		return "USDT_TRC20"
-	case constants.PaymentChannelTypeTrx:
-		return "TRX"
-	default:
-		return ""
-	}
 }
 
 func CreatePayment(ctx context.Context, cfg *Config, input CreateInput) (*CreateResult, error) {
@@ -309,26 +288,6 @@ func ToPaymentStatus(status int) string {
 	default:
 		return constants.PaymentStatusPending
 	}
-}
-
-func QueryOrder(ctx context.Context, cfg *Config, tokenOrderID string) (*QueryResult, error) {
-	if cfg == nil || strings.TrimSpace(tokenOrderID) == "" {
-		return nil, ErrConfigInvalid
-	}
-	params := map[string]interface{}{
-		"Id": tokenOrderID,
-	}
-	params["Signature"] = SignPayload(params, cfg.NotifySecret)
-	endpoint := cfg.GatewayURL + queryOrderPath + "?Id=" + strings.TrimSpace(tokenOrderID) + "&Signature=" + params["Signature"].(string)
-	body, err := getJSON(ctx, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
-	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("%w: decode query response failed", ErrResponseInvalid)
-	}
-	return &QueryResult{Raw: raw}, nil
 }
 
 func SignPayload(payload map[string]interface{}, notifySecret string) string {
@@ -514,26 +473,4 @@ func postJSON(ctx context.Context, endpoint string, payload map[string]interface
 		return nil, fmt.Errorf("http status %d", resp.StatusCode)
 	}
 	return respBody, nil
-}
-
-func getJSON(ctx context.Context, endpoint string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("http status %d", resp.StatusCode)
-	}
-	return body, nil
 }

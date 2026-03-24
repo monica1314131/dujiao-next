@@ -554,10 +554,6 @@ func normalizeProductSKUInputs(inputs []ProductSKUInput, fulfillmentType string,
 	return normalized, minActivePrice, manualStockTotal, nil
 }
 
-func applyProductSKUs(skuRepo repository.ProductSKURepository, productID uint, rows []normalizedProductSKU) error {
-	return applyProductSKUsWithStockGuard(skuRepo, nil, productID, "", rows)
-}
-
 func applyProductSKUsWithStockGuard(
 	skuRepo repository.ProductSKURepository,
 	cardSecretRepo repository.CardSecretRepository,

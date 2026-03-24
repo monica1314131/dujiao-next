@@ -73,15 +73,6 @@ func Success(c *gin.Context, data interface{}) {
 	})
 }
 
-// SuccessWithMsg 成功响应（自定义消息）
-func SuccessWithMsg(c *gin.Context, msg string, data interface{}) {
-	c.JSON(http.StatusOK, Response{
-		StatusCode: 0,
-		Msg:        msg,
-		Data:       data,
-	})
-}
-
 // SuccessWithPage 分页成功响应
 func SuccessWithPage(c *gin.Context, data interface{}, pagination Pagination) {
 	c.JSON(http.StatusOK, PageResponse{
@@ -101,20 +92,6 @@ func Error(c *gin.Context, statusCode int, msg string) {
 	})
 }
 
-// ErrorWithData 错误响应（带数据）
-func ErrorWithData(c *gin.Context, statusCode int, msg string, data interface{}) {
-	c.JSON(http.StatusOK, Response{
-		StatusCode: statusCode,
-		Msg:        msg,
-		Data:       attachRequestID(c, data),
-	})
-}
-
-// NotFound 404响应
-func NotFound(c *gin.Context, msg string) {
-	Error(c, CodeNotFound, msg)
-}
-
 // Unauthorized 401响应
 func Unauthorized(c *gin.Context, msg string) {
 	Error(c, CodeUnauthorized, msg)
@@ -123,11 +100,6 @@ func Unauthorized(c *gin.Context, msg string) {
 // Forbidden 403响应
 func Forbidden(c *gin.Context, msg string) {
 	Error(c, CodeForbidden, msg)
-}
-
-// BadRequest 400响应
-func BadRequest(c *gin.Context, msg string) {
-	Error(c, CodeBadRequest, msg)
 }
 
 // ChannelSuccess 渠道 API 成功响应。
@@ -140,32 +112,11 @@ func ChannelSuccess(c *gin.Context, data interface{}) {
 	})
 }
 
-// ChannelSuccessWithMsg 渠道 API 成功响应（自定义消息）。
-func ChannelSuccessWithMsg(c *gin.Context, msg string, data interface{}) {
-	c.JSON(http.StatusOK, ChannelResponse{
-		StatusCode: CodeOK,
-		Msg:        msg,
-		Data:       data,
-		RequestID:  currentRequestID(c),
-	})
-}
-
 // ChannelError 渠道 API 错误响应。
 func ChannelError(c *gin.Context, httpStatus, statusCode int, msg, errorCode string) {
 	c.JSON(httpStatus, ChannelResponse{
 		StatusCode: statusCode,
 		Msg:        msg,
-		ErrorCode:  errorCode,
-		RequestID:  currentRequestID(c),
-	})
-}
-
-// ChannelErrorWithData 渠道 API 错误响应（附带数据）。
-func ChannelErrorWithData(c *gin.Context, httpStatus, statusCode int, msg, errorCode string, data interface{}) {
-	c.JSON(httpStatus, ChannelResponse{
-		StatusCode: statusCode,
-		Msg:        msg,
-		Data:       data,
 		ErrorCode:  errorCode,
 		RequestID:  currentRequestID(c),
 	})

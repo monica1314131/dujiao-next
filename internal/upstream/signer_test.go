@@ -56,16 +56,16 @@ func TestIsTimestampValid(t *testing.T) {
 		t.Fatal("current timestamp should be valid")
 	}
 
-	if !IsTimestampValid(now - 200) {
-		t.Fatal("timestamp 200 seconds ago should be valid")
+	if !IsTimestampValid(now - (MaxTimestampSkew / 2)) {
+		t.Fatalf("timestamp within skew window should be valid: skew=%d", MaxTimestampSkew)
 	}
 
-	if IsTimestampValid(now - 400) {
-		t.Fatal("timestamp 400 seconds ago should be invalid")
+	if IsTimestampValid(now - (MaxTimestampSkew + 1)) {
+		t.Fatalf("timestamp older than skew window should be invalid: skew=%d", MaxTimestampSkew)
 	}
 
-	if IsTimestampValid(now + 400) {
-		t.Fatal("timestamp 400 seconds in future should be invalid")
+	if IsTimestampValid(now + (MaxTimestampSkew + 1)) {
+		t.Fatalf("future timestamp beyond skew window should be invalid: skew=%d", MaxTimestampSkew)
 	}
 }
 

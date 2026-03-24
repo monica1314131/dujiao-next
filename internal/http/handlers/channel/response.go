@@ -83,19 +83,6 @@ func respondChannelError(c *gin.Context, httpCode, code int, errorCode, key stri
 	response.ChannelError(c, httpCode, code, msg, errorCode)
 }
 
-func respondChannelErrorWithMsg(c *gin.Context, httpCode, code int, errorCode, msg string, err error) {
-	if err != nil {
-		shared.RequestLog(c).Errorw("channel_handler_error",
-			"http_code", httpCode,
-			"code", code,
-			"error_code", errorCode,
-			"message", msg,
-			"error", err,
-		)
-	}
-	response.ChannelError(c, httpCode, code, msg, errorCode)
-}
-
 func respondChannelBindError(c *gin.Context, err error) {
 	locale := i18n.ResolveLocale(c)
 

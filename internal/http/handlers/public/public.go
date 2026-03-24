@@ -273,6 +273,7 @@ func (h *Handler) decoratePublicProduct(product *models.Product, promotionServic
 
 	item := PublicProductView{Product: *product}
 	displayPrice := resolvePublicDisplayPrice(product)
+	displaySKUID := resolvePublicDisplaySKUID(product)
 	item.Product.PriceAmount = displayPrice
 	h.decorateProductStock(product, &item)
 
@@ -317,8 +318,8 @@ func (h *Handler) decoratePublicProduct(product *models.Product, promotionServic
 	// 构建 PublicSKUs 并为每个 active SKU 计算促销价
 	// 使用 item.Product.SKUs（decorateProductStock 可能已修改库存字段）
 	skuViews := make([]PublicSKUView, 0, len(item.Product.SKUs))
-	var bestPromotion *models.Promotion
-	var lowestPromotionPrice *models.Money
+	var displayPromotion *models.Promotion
+	var displayPromotionPrice *models.Money
 
 	for _, sku := range item.Product.SKUs {
 		sv := PublicSKUView{ProductSKU: sku}
@@ -341,12 +342,10 @@ func (h *Handler) decoratePublicProduct(product *models.Product, promotionServic
 			}
 			if promotion != nil && discountedPrice.Decimal.LessThan(sku.PriceAmount.Decimal) {
 				sv.PromotionPriceAmount = &discountedPrice
-				if bestPromotion == nil {
-					bestPromotion = promotion
-				}
-				if lowestPromotionPrice == nil || discountedPrice.Decimal.LessThan(lowestPromotionPrice.Decimal) {
+				if displaySKUID != 0 && sku.ID == displaySKUID {
+					displayPromotion = promotion
 					cp := discountedPrice
-					lowestPromotionPrice = &cp
+					displayPromotionPrice = &cp
 				}
 			}
 		}
@@ -357,13 +356,13 @@ func (h *Handler) decoratePublicProduct(product *models.Product, promotionServic
 	// 隐藏嵌入 Product 中的原始 SKUs，由 PublicSKUs 代替输出
 	item.Product.SKUs = nil
 
-	// 产品级促销信息：取最低 SKU 促销价，用于列表页展示
-	if bestPromotion != nil && lowestPromotionPrice != nil {
-		promotionID := bestPromotion.ID
+	// 产品级促销信息与展示价保持同一口径，避免列表价与活动价来自不同 SKU。
+	if displayPromotion != nil && displayPromotionPrice != nil {
+		promotionID := displayPromotion.ID
 		item.PromotionID = &promotionID
-		item.PromotionName = strings.TrimSpace(bestPromotion.Name)
-		item.PromotionType = strings.TrimSpace(bestPromotion.Type)
-		item.PromotionPriceAmount = lowestPromotionPrice
+		item.PromotionName = strings.TrimSpace(displayPromotion.Name)
+		item.PromotionType = strings.TrimSpace(displayPromotion.Type)
+		item.PromotionPriceAmount = displayPromotionPrice
 	}
 
 	return item, nil
@@ -380,6 +379,19 @@ func resolvePublicDisplayPrice(product *models.Product) models.Money {
 		return sku.PriceAmount
 	}
 	return product.PriceAmount
+}
+
+func resolvePublicDisplaySKUID(product *models.Product) uint {
+	if product == nil {
+		return 0
+	}
+	for _, sku := range product.SKUs {
+		if !sku.IsActive {
+			continue
+		}
+		return sku.ID
+	}
+	return 0
 }
 
 func (h *Handler) decorateProductStock(product *models.Product, item *PublicProductView) {
