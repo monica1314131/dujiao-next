@@ -184,6 +184,7 @@ func (s *OrderService) buildOrderResult(input orderCreateParams) (*orderBuildRes
 			},
 			Tags:                         product.Tags,
 			UnitPrice:                    models.NewMoneyFromDecimal(unitPriceAmount),
+			CostPrice:                    sku.CostPriceAmount, // 成本价快照
 			Quantity:                     item.Quantity,
 			TotalPrice:                   models.NewMoneyFromDecimal(total),
 			MemberDiscount:               models.NewMoneyFromDecimal(itemMemberDiscount),

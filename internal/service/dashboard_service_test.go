@@ -37,6 +37,14 @@ func (s dashboardServiceRepoStub) GetTopProducts(startAt, endAt time.Time, limit
 	return []repository.DashboardProductRankingRow{}, nil
 }
 
+func (s dashboardServiceRepoStub) GetProfitOverview(startAt, endAt time.Time) (repository.DashboardProfitOverviewRow, error) {
+	return repository.DashboardProfitOverviewRow{}, nil
+}
+
+func (s dashboardServiceRepoStub) GetProfitTrends(startAt, endAt time.Time) ([]repository.DashboardProfitTrendRow, error) {
+	return []repository.DashboardProfitTrendRow{}, nil
+}
+
 func (s dashboardServiceRepoStub) GetTopChannels(startAt, endAt time.Time, limit int) ([]repository.DashboardChannelRankingRow, error) {
 	return []repository.DashboardChannelRankingRow{}, nil
 }

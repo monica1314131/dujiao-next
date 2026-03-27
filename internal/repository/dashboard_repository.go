@@ -18,6 +18,8 @@ type DashboardRepository interface {
 	GetOverview(startAt, endAt time.Time) (DashboardOverviewRow, error)
 	GetOrderTrends(startAt, endAt time.Time) ([]DashboardOrderTrendRow, error)
 	GetPaymentTrends(startAt, endAt time.Time) ([]DashboardPaymentTrendRow, error)
+	GetProfitOverview(startAt, endAt time.Time) (DashboardProfitOverviewRow, error)
+	GetProfitTrends(startAt, endAt time.Time) ([]DashboardProfitTrendRow, error)
 	GetStockStats(lowStockThreshold int64) (DashboardStockStatsRow, error)
 	GetInventoryAlertItems(lowStockThreshold int64) ([]DashboardInventoryAlertRow, error)
 	GetTopProducts(startAt, endAt time.Time, limit int) ([]DashboardProductRankingRow, error)
@@ -38,6 +40,19 @@ type DashboardOverviewRow struct {
 	NewUsers             int64
 	ActiveProducts       int64
 	Currency             string
+}
+
+// DashboardProfitOverviewRow 利润总览原始统计结果
+type DashboardProfitOverviewRow struct {
+	TotalRevenue float64
+	TotalCost    float64
+}
+
+// DashboardProfitTrendRow 利润趋势统计
+type DashboardProfitTrendRow struct {
+	Day     string
+	Revenue float64
+	Cost    float64
 }
 
 // DashboardOrderTrendRow 订单趋势统计
@@ -84,6 +99,7 @@ type DashboardProductRankingRow struct {
 	PaidOrders int64
 	Quantity   int64
 	PaidAmount float64
+	TotalCost  float64
 }
 
 // DashboardChannelRankingRow 渠道排行原始行
@@ -523,7 +539,8 @@ func (r *GormDashboardRepository) GetTopProducts(startAt, endAt time.Time, limit
 			%s as title,
 			COUNT(DISTINCT order_items.order_id) as paid_orders,
 			COALESCE(SUM(order_items.quantity), 0) as quantity,
-			COALESCE(SUM(order_items.total_price - order_items.coupon_discount - order_items.promotion_discount), 0) as paid_amount
+			COALESCE(SUM(order_items.total_price - order_items.coupon_discount - order_items.promotion_discount), 0) as paid_amount,
+			COALESCE(SUM(order_items.cost_price * order_items.quantity), 0) as total_cost
 		`, titleExpr)).
 		Joins("JOIN orders ON orders.id = order_items.order_id").
 		Where("orders.created_at >= ? AND orders.created_at < ? AND orders.status IN ?", startAt, endAt, paidOrderStatuses()).
@@ -698,6 +715,67 @@ func resolveDashboardLegacyStockTargetSKUIndex(skus []models.ProductSKU) int {
 		}
 	}
 	return firstActiveIdx
+}
+
+// GetProfitOverview 获取利润总览统计
+func (r *GormDashboardRepository) GetProfitOverview(startAt, endAt time.Time) (DashboardProfitOverviewRow, error) {
+	result := DashboardProfitOverviewRow{}
+	if err := r.db.Model(&models.OrderItem{}).
+		Select(`
+			COALESCE(SUM(order_items.total_price - order_items.coupon_discount - order_items.promotion_discount), 0) as total_revenue,
+			COALESCE(SUM(order_items.cost_price * order_items.quantity), 0) as total_cost
+		`).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where("orders.parent_id IS NULL AND orders.created_at >= ? AND orders.created_at < ? AND orders.status IN ?", startAt, endAt, paidOrderStatuses()).
+		Scan(&result).Error; err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+// GetProfitTrends 获取利润趋势
+func (r *GormDashboardRepository) GetProfitTrends(startAt, endAt time.Time) ([]DashboardProfitTrendRow, error) {
+	type profitRow struct {
+		CreatedAt time.Time
+		Revenue   float64
+		Cost      float64
+	}
+
+	rows := make([]profitRow, 0)
+	if err := r.db.Model(&models.OrderItem{}).
+		Select(`
+			orders.created_at as created_at,
+			(order_items.total_price - order_items.coupon_discount - order_items.promotion_discount) as revenue,
+			(order_items.cost_price * order_items.quantity) as cost
+		`).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where("orders.parent_id IS NULL AND orders.created_at >= ? AND orders.created_at < ? AND orders.status IN ?", startAt, endAt, paidOrderStatuses()).
+		Order("orders.created_at asc").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	location := startAt.Location()
+	grouped := make(map[string]*DashboardProfitTrendRow, len(rows))
+	for _, row := range rows {
+		day := dashboardDayKey(row.CreatedAt, location)
+		point := grouped[day]
+		if point == nil {
+			point = &DashboardProfitTrendRow{Day: day}
+			grouped[day] = point
+		}
+		point.Revenue += row.Revenue
+		point.Cost += row.Cost
+	}
+
+	result := make([]DashboardProfitTrendRow, 0, len(grouped))
+	for _, item := range grouped {
+		result = append(result, *item)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Day < result[j].Day
+	})
+	return result, nil
 }
 
 // GetTopChannels 获取支付渠道排行榜

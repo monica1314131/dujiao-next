@@ -72,7 +72,7 @@ func TestSyncSingleProductSKU_MultipleRowsKeepsSingleActive(t *testing.T) {
 	}
 
 	targetPrice := decimal.RequireFromString("88.88")
-	if err := syncSingleProductSKU(repo, productID, targetPrice, 5, true); err != nil {
+	if err := syncSingleProductSKU(repo, productID, targetPrice, decimal.Zero, 5, true); err != nil {
 		t.Fatalf("sync single sku failed: %v", err)
 	}
 
@@ -138,7 +138,7 @@ func TestSyncSingleProductSKU_NoActivePrefersDefaultCode(t *testing.T) {
 	}
 
 	targetPrice := decimal.RequireFromString("19.90")
-	if err := syncSingleProductSKU(repo, productID, targetPrice, 6, true); err != nil {
+	if err := syncSingleProductSKU(repo, productID, targetPrice, decimal.Zero, 6, true); err != nil {
 		t.Fatalf("sync single sku failed: %v", err)
 	}
 

@@ -56,6 +56,9 @@ type DashboardKPI struct {
 	PendingPaymentOrders int64  `json:"pending_payment_orders"`
 	ProcessingOrders     int64  `json:"processing_orders"`
 	GMVPaid              string `json:"gmv_paid"`
+	TotalCost            string `json:"total_cost"`
+	TotalProfit          string `json:"total_profit"`
+	ProfitMargin         string `json:"profit_margin"`
 	PaymentsTotal        int64  `json:"payments_total"`
 	PaymentsSuccess      int64  `json:"payments_success"`
 	PaymentsFailed       int64  `json:"payments_failed"`
@@ -105,6 +108,7 @@ type DashboardTrendPoint struct {
 	PaymentsSuccess int64  `json:"payments_success"`
 	PaymentsFailed  int64  `json:"payments_failed"`
 	GMVPaid         string `json:"gmv_paid"`
+	Profit          string `json:"profit"`
 }
 
 // DashboardRankingsResponse 仪表盘排行榜响应
@@ -124,6 +128,8 @@ type DashboardProductRanking struct {
 	PaidOrders int64  `json:"paid_orders"`
 	Quantity   int64  `json:"quantity"`
 	PaidAmount string `json:"paid_amount"`
+	TotalCost  string `json:"total_cost"`
+	Profit     string `json:"profit"`
 }
 
 // DashboardChannelRanking 渠道排行项
@@ -180,9 +186,19 @@ func (s *DashboardService) GetOverview(ctx context.Context, input DashboardQuery
 	if err != nil {
 		return nil, err
 	}
+	profitOverview, err := s.repo.GetProfitOverview(window.startAt, window.endAt)
+	if err != nil {
+		return nil, err
+	}
 	stockStats, err := s.repo.GetStockStats(setting.Alert.LowStockThreshold)
 	if err != nil {
 		return nil, err
+	}
+
+	totalProfit := profitOverview.TotalRevenue - profitOverview.TotalCost
+	profitMargin := 0.0
+	if profitOverview.TotalRevenue > 0 {
+		profitMargin = totalProfit / profitOverview.TotalRevenue * 100
 	}
 
 	paymentSuccessRate := 0.0
@@ -213,6 +229,9 @@ func (s *DashboardService) GetOverview(ctx context.Context, input DashboardQuery
 			PendingPaymentOrders: overview.PendingPaymentOrders,
 			ProcessingOrders:     overview.ProcessingOrders,
 			GMVPaid:              formatMoneyValue(overview.GMVPaid),
+			TotalCost:            formatMoneyValue(profitOverview.TotalCost),
+			TotalProfit:          formatMoneyValue(totalProfit),
+			ProfitMargin:         formatPercentValue(profitMargin),
 			PaymentsTotal:        overview.PaymentsTotal,
 			PaymentsSuccess:      overview.PaymentsSuccess,
 			PaymentsFailed:       overview.PaymentsFailed,
@@ -283,6 +302,10 @@ func (s *DashboardService) GetTrends(ctx context.Context, input DashboardQueryIn
 	if err != nil {
 		return nil, err
 	}
+	profitRows, err := s.repo.GetProfitTrends(window.startAt, window.endAt)
+	if err != nil {
+		return nil, err
+	}
 
 	orderMap := make(map[string]repository.DashboardOrderTrendRow, len(orderRows))
 	for _, item := range orderRows {
@@ -292,12 +315,18 @@ func (s *DashboardService) GetTrends(ctx context.Context, input DashboardQueryIn
 	for _, item := range paymentRows {
 		paymentMap[item.Day] = item
 	}
+	profitMap := make(map[string]repository.DashboardProfitTrendRow, len(profitRows))
+	for _, item := range profitRows {
+		profitMap[item.Day] = item
+	}
 
 	points := make([]DashboardTrendPoint, 0)
 	for cursor := time.Date(window.startAt.Year(), window.startAt.Month(), window.startAt.Day(), 0, 0, 0, 0, window.startAt.Location()); cursor.Before(window.endAt); cursor = cursor.AddDate(0, 0, 1) {
 		day := cursor.Format("2006-01-02")
 		orderItem := orderMap[day]
 		paymentItem := paymentMap[day]
+		profitItem := profitMap[day]
+		dayProfit := profitItem.Revenue - profitItem.Cost
 		points = append(points, DashboardTrendPoint{
 			Date:            day,
 			OrdersTotal:     orderItem.OrdersTotal,
@@ -305,6 +334,7 @@ func (s *DashboardService) GetTrends(ctx context.Context, input DashboardQueryIn
 			PaymentsSuccess: paymentItem.PaymentsSuccess,
 			PaymentsFailed:  paymentItem.PaymentsFailed,
 			GMVPaid:         formatMoneyValue(paymentItem.GMVPaid),
+			Profit:          formatMoneyValue(dayProfit),
 		})
 	}
 
@@ -370,6 +400,8 @@ func (s *DashboardService) GetRankings(ctx context.Context, input DashboardQuery
 			PaidOrders: item.PaidOrders,
 			Quantity:   item.Quantity,
 			PaidAmount: formatMoneyValue(item.PaidAmount),
+			TotalCost:  formatMoneyValue(item.TotalCost),
+			Profit:     formatMoneyValue(item.PaidAmount - item.TotalCost),
 		})
 	}
 

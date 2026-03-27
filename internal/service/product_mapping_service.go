@@ -111,6 +111,7 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 	roundingMode := conn.PriceRoundingMode
 
 	priceAmount, _ := decimal.NewFromString(upProduct.PriceAmount)
+	costPriceAmount := priceAmount // 成本价 = 上游原始价格（不加价）
 	priceAmount = CalculateLocalPrice(priceAmount, exchangeRate, markupPercent, roundingMode)
 	if priceAmount.LessThanOrEqual(decimal.Zero) && len(upProduct.SKUs) > 0 {
 		// 取转换加价后 SKU 最低价
@@ -119,6 +120,7 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 			localPrice := CalculateLocalPrice(skuPrice, exchangeRate, markupPercent, roundingMode)
 			if localPrice.GreaterThan(decimal.Zero) && (priceAmount.IsZero() || localPrice.LessThan(priceAmount)) {
 				priceAmount = localPrice
+				costPriceAmount = skuPrice
 			}
 		}
 	}
@@ -138,6 +140,7 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 		ContentJSON:          localContent,
 		ManualFormSchemaJSON: upProduct.ManualFormSchema,
 		PriceAmount:          models.NewMoneyFromDecimal(priceAmount.Round(2)),
+		CostPriceAmount:      models.NewMoneyFromDecimal(costPriceAmount.Round(2)),
 		Images:               models.StringArray(localImages),
 		Tags:                 models.StringArray(upProduct.Tags),
 		PurchaseType:         constants.ProductPurchaseMember,
@@ -166,12 +169,13 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 			skuPrice, _ := decimal.NewFromString(upSKU.PriceAmount)
 			localPrice := CalculateLocalPrice(skuPrice, exchangeRate, markupPercent, roundingMode)
 			localSKU := models.ProductSKU{
-				ProductID:      product.ID,
-				SKUCode:        upSKU.SKUCode,
-				SpecValuesJSON: upSKU.SpecValues,
-				PriceAmount:    models.NewMoneyFromDecimal(localPrice.Round(2)),
-				IsActive:       upSKU.IsActive,
-				SortOrder:      0,
+				ProductID:       product.ID,
+				SKUCode:         upSKU.SKUCode,
+				SpecValuesJSON:  upSKU.SpecValues,
+				PriceAmount:     models.NewMoneyFromDecimal(localPrice.Round(2)),
+				CostPriceAmount: models.NewMoneyFromDecimal(skuPrice.Round(2)), // 成本价 = 上游原始价格
+				IsActive:        upSKU.IsActive,
+				SortOrder:       0,
 			}
 			if err := skuRepo.Create(&localSKU); err != nil {
 				return fmt.Errorf("create local sku: %w", err)
@@ -481,12 +485,13 @@ func (s *ProductMappingService) SyncProduct(mappingID uint) error {
 		skuPrice, _ := decimal.NewFromString(upSKU.PriceAmount)
 		localPrice := CalculateLocalPrice(skuPrice, conn.ExchangeRate, conn.PriceMarkupPercent, conn.PriceRoundingMode)
 		newLocalSKU := models.ProductSKU{
-			ProductID:      mapping.LocalProductID,
-			SKUCode:        upSKU.SKUCode,
-			SpecValuesJSON: upSKU.SpecValues,
-			PriceAmount:    models.NewMoneyFromDecimal(localPrice.Round(2)),
-			IsActive:       upSKU.IsActive,
-			SortOrder:      0,
+			ProductID:       mapping.LocalProductID,
+			SKUCode:         upSKU.SKUCode,
+			SpecValuesJSON:  upSKU.SpecValues,
+			PriceAmount:     models.NewMoneyFromDecimal(localPrice.Round(2)),
+			CostPriceAmount: models.NewMoneyFromDecimal(skuPrice.Round(2)), // 成本价 = 上游原始价格
+			IsActive:        upSKU.IsActive,
+			SortOrder:       0,
 		}
 		if err := s.productSKURepo.Create(&newLocalSKU); err != nil {
 			continue
@@ -619,6 +624,7 @@ func (s *ProductMappingService) ReapplyMarkup(connectionID uint) (int, error) {
 				continue
 			}
 			localSKU.PriceAmount = models.NewMoneyFromDecimal(newLocalPrice.Round(2))
+			localSKU.CostPriceAmount = sm.UpstreamPrice // 成本价 = 上游原始价格
 			_ = s.productSKURepo.Update(localSKU)
 		}
 
@@ -633,19 +639,24 @@ func (s *ProductMappingService) ReapplyMarkup(connectionID uint) (int, error) {
 	return updated, nil
 }
 
-// recalcProductPrice 重新计算商品基准价格为最低活跃 SKU 价格
+// recalcProductPrice 重新计算商品基准价格和成本价为最低活跃 SKU 价格
 func (s *ProductMappingService) recalcProductPrice(product *models.Product) {
 	allSKUs, err := s.productSKURepo.ListByProduct(product.ID, true)
 	if err != nil || len(allSKUs) == 0 {
 		return
 	}
 	minPrice := allSKUs[0].PriceAmount.Decimal
+	minCostPrice := allSKUs[0].CostPriceAmount.Decimal
 	for _, sku := range allSKUs[1:] {
 		if sku.PriceAmount.Decimal.LessThan(minPrice) {
 			minPrice = sku.PriceAmount.Decimal
 		}
+		if sku.CostPriceAmount.Decimal.LessThan(minCostPrice) {
+			minCostPrice = sku.CostPriceAmount.Decimal
+		}
 	}
 	product.PriceAmount = models.NewMoneyFromDecimal(minPrice.Round(2))
+	product.CostPriceAmount = models.NewMoneyFromDecimal(minCostPrice.Round(2))
 	_ = s.productRepo.Update(product)
 }
 

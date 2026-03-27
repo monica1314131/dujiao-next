@@ -40,6 +40,7 @@ type CreateProductInput struct {
 	ContentJSON          map[string]interface{}
 	ManualFormSchemaJSON map[string]interface{}
 	PriceAmount          decimal.Decimal
+	CostPriceAmount      decimal.Decimal
 	Images               []string
 	Tags                 []string
 	PurchaseType         string
@@ -57,6 +58,7 @@ type ProductSKUInput struct {
 	SKUCode          string
 	SpecValuesJSON   map[string]interface{}
 	PriceAmount      decimal.Decimal
+	CostPriceAmount  decimal.Decimal
 	ManualStockTotal int
 	IsActive         *bool
 	SortOrder        int
@@ -180,6 +182,8 @@ func (s *ProductService) Create(input CreateProductInput) (*models.Product, erro
 		maxPurchaseQuantity = normalizeMaxPurchaseQuantity(*input.MaxPurchaseQuantity)
 	}
 
+	costPriceAmount := input.CostPriceAmount.Round(2)
+
 	var normalizedSKUs []normalizedProductSKU
 	if len(input.SKUs) > 0 {
 		if s.productSKURepo == nil {
@@ -190,6 +194,7 @@ func (s *ProductService) Create(input CreateProductInput) (*models.Product, erro
 		if normalizeErr != nil {
 			return nil, normalizeErr
 		}
+		costPriceAmount = minActiveCostPrice(normalizedSKUs)
 	}
 
 	product := models.Product{
@@ -201,6 +206,7 @@ func (s *ProductService) Create(input CreateProductInput) (*models.Product, erro
 		ContentJSON:          models.JSON(input.ContentJSON),
 		ManualFormSchemaJSON: models.JSON{},
 		PriceAmount:          models.NewMoneyFromDecimal(priceAmount),
+		CostPriceAmount:      models.NewMoneyFromDecimal(costPriceAmount),
 		Images:               models.StringArray(input.Images),
 		Tags:                 models.StringArray(input.Tags),
 		PurchaseType:         purchaseType,
@@ -237,7 +243,7 @@ func (s *ProductService) Create(input CreateProductInput) (*models.Product, erro
 		if len(normalizedSKUs) > 0 {
 			return applyProductSKUsWithStockGuard(skuRepo, cardSecretRepo, product.ID, fulfillmentType, normalizedSKUs)
 		}
-		return syncSingleProductSKU(skuRepo, product.ID, priceAmount, manualStockTotal, true)
+		return syncSingleProductSKU(skuRepo, product.ID, priceAmount, costPriceAmount, manualStockTotal, true)
 	}); err != nil {
 		return nil, err
 	}
@@ -349,6 +355,11 @@ func (s *ProductService) Update(id string, input CreateProductInput) (*models.Pr
 	}
 
 	product.PriceAmount = models.NewMoneyFromDecimal(priceAmount)
+	if len(normalizedSKUs) > 0 {
+		product.CostPriceAmount = models.NewMoneyFromDecimal(minActiveCostPrice(normalizedSKUs))
+	} else {
+		product.CostPriceAmount = models.NewMoneyFromDecimal(input.CostPriceAmount.Round(2))
+	}
 	product.ManualStockTotal = manualStockTotal
 
 	if err := s.repo.Transaction(func(tx *gorm.DB) error {
@@ -372,14 +383,14 @@ func (s *ProductService) Update(id string, input CreateProductInput) (*models.Pr
 		if len(normalizedSKUs) > 0 {
 			return nil
 		}
-		return syncSingleProductSKU(skuRepo, product.ID, priceAmount, product.ManualStockTotal, true)
+		return syncSingleProductSKU(skuRepo, product.ID, priceAmount, product.CostPriceAmount.Decimal, product.ManualStockTotal, true)
 	}); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(id)
 }
 
-func syncSingleProductSKU(skuRepo repository.ProductSKURepository, productID uint, priceAmount decimal.Decimal, manualStockTotal int, createWhenMissing bool) error {
+func syncSingleProductSKU(skuRepo repository.ProductSKURepository, productID uint, priceAmount decimal.Decimal, costPriceAmount decimal.Decimal, manualStockTotal int, createWhenMissing bool) error {
 	if skuRepo == nil || productID == 0 {
 		return nil
 	}
@@ -396,6 +407,7 @@ func syncSingleProductSKU(skuRepo repository.ProductSKURepository, productID uin
 			SKUCode:           models.DefaultSKUCode,
 			SpecValuesJSON:    models.JSON{},
 			PriceAmount:       models.NewMoneyFromDecimal(priceAmount),
+			CostPriceAmount:   models.NewMoneyFromDecimal(costPriceAmount),
 			ManualStockTotal:  manualStockTotal,
 			ManualStockLocked: 0,
 			ManualStockSold:   0,
@@ -410,6 +422,7 @@ func syncSingleProductSKU(skuRepo repository.ProductSKURepository, productID uin
 
 	target := skus[targetIndex]
 	target.PriceAmount = models.NewMoneyFromDecimal(priceAmount)
+	target.CostPriceAmount = models.NewMoneyFromDecimal(costPriceAmount)
 	target.ManualStockTotal = manualStockTotal
 	target.IsActive = true
 	if strings.TrimSpace(target.SKUCode) == "" {
@@ -462,6 +475,7 @@ type normalizedProductSKU struct {
 	SKUCode          string
 	SpecValuesJSON   models.JSON
 	PriceAmount      models.Money
+	CostPriceAmount  models.Money
 	ManualStockTotal int
 	IsActive         bool
 	SortOrder        int
@@ -493,6 +507,10 @@ func normalizeProductSKUInputs(inputs []ProductSKUInput, fulfillmentType string,
 		if priceAmount.LessThanOrEqual(decimal.Zero) {
 			return nil, decimal.Zero, 0, ErrProductPriceInvalid
 		}
+		costPriceAmount := input.CostPriceAmount.Round(2)
+		if costPriceAmount.LessThan(decimal.Zero) {
+			return nil, decimal.Zero, 0, ErrProductPriceInvalid
+		}
 
 		manualTotal := input.ManualStockTotal
 		if manualTotal < constants.ManualStockUnlimited {
@@ -522,6 +540,7 @@ func normalizeProductSKUInputs(inputs []ProductSKUInput, fulfillmentType string,
 			SKUCode:          skuCode,
 			SpecValuesJSON:   specValues,
 			PriceAmount:      models.NewMoneyFromDecimal(priceAmount),
+			CostPriceAmount:  models.NewMoneyFromDecimal(costPriceAmount),
 			ManualStockTotal: manualTotal,
 			IsActive:         isActive,
 			SortOrder:        input.SortOrder,
@@ -551,6 +570,23 @@ func normalizeProductSKUInputs(inputs []ProductSKUInput, fulfillmentType string,
 		manualStockTotal = constants.ManualStockUnlimited
 	}
 	return normalized, minActivePrice, manualStockTotal, nil
+}
+
+// minActiveCostPrice 从已标准化的 SKU 列表中取最低活跃 SKU 的成本价
+func minActiveCostPrice(skus []normalizedProductSKU) decimal.Decimal {
+	first := true
+	min := decimal.Zero
+	for _, s := range skus {
+		if !s.IsActive {
+			continue
+		}
+		d := s.CostPriceAmount.Decimal
+		if first || d.LessThan(min) {
+			min = d
+			first = false
+		}
+	}
+	return min
 }
 
 func applyProductSKUsWithStockGuard(
@@ -587,6 +623,7 @@ func applyProductSKUsWithStockGuard(
 			existing.SKUCode = row.SKUCode
 			existing.SpecValuesJSON = row.SpecValuesJSON
 			existing.PriceAmount = row.PriceAmount
+			existing.CostPriceAmount = row.CostPriceAmount
 			existing.ManualStockTotal = row.ManualStockTotal
 			existing.IsActive = row.IsActive
 			existing.SortOrder = row.SortOrder
@@ -602,6 +639,7 @@ func applyProductSKUsWithStockGuard(
 		if existing, ok := existingByCode[codeKey]; ok {
 			existing.SpecValuesJSON = row.SpecValuesJSON
 			existing.PriceAmount = row.PriceAmount
+			existing.CostPriceAmount = row.CostPriceAmount
 			existing.ManualStockTotal = row.ManualStockTotal
 			existing.IsActive = row.IsActive
 			existing.SortOrder = row.SortOrder
@@ -621,6 +659,7 @@ func applyProductSKUsWithStockGuard(
 			SKUCode:           row.SKUCode,
 			SpecValuesJSON:    row.SpecValuesJSON,
 			PriceAmount:       row.PriceAmount,
+			CostPriceAmount:   row.CostPriceAmount,
 			ManualStockTotal:  row.ManualStockTotal,
 			ManualStockLocked: 0,
 			ManualStockSold:   0,

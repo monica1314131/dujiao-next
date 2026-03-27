@@ -80,6 +80,7 @@ type ProductSKURequest struct {
 	SKUCode          string                 `json:"sku_code" binding:"required"`
 	SpecValuesJSON   map[string]interface{} `json:"spec_values"`
 	PriceAmount      float64                `json:"price_amount" binding:"required"`
+	CostPriceAmount  float64                `json:"cost_price_amount"`
 	ManualStockTotal int                    `json:"manual_stock_total"`
 	IsActive         *bool                  `json:"is_active"`
 	SortOrder        int                    `json:"sort_order"`
@@ -95,6 +96,7 @@ type CreateProductRequest struct {
 	ContentJSON         map[string]interface{} `json:"content"`
 	ManualFormSchema    map[string]interface{} `json:"manual_form_schema"`
 	PriceAmount         float64                `json:"price_amount" binding:"required"`
+	CostPriceAmount     float64                `json:"cost_price_amount"`
 	Images              []string               `json:"images"`
 	Tags                []string               `json:"tags"`
 	PurchaseType        string                 `json:"purchase_type"`
@@ -118,6 +120,7 @@ func toProductSKUInputs(items []ProductSKURequest) []service.ProductSKUInput {
 			SKUCode:          item.SKUCode,
 			SpecValuesJSON:   item.SpecValuesJSON,
 			PriceAmount:      decimal.NewFromFloat(item.PriceAmount),
+			CostPriceAmount:  decimal.NewFromFloat(item.CostPriceAmount),
 			ManualStockTotal: item.ManualStockTotal,
 			IsActive:         item.IsActive,
 			SortOrder:        item.SortOrder,
@@ -143,6 +146,7 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 		ContentJSON:          req.ContentJSON,
 		ManualFormSchemaJSON: req.ManualFormSchema,
 		PriceAmount:          decimal.NewFromFloat(req.PriceAmount),
+		CostPriceAmount:      decimal.NewFromFloat(req.CostPriceAmount),
 		Images:               req.Images,
 		Tags:                 req.Tags,
 		PurchaseType:         req.PurchaseType,
@@ -217,6 +221,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		ContentJSON:          req.ContentJSON,
 		ManualFormSchemaJSON: req.ManualFormSchema,
 		PriceAmount:          decimal.NewFromFloat(req.PriceAmount),
+		CostPriceAmount:      decimal.NewFromFloat(req.CostPriceAmount),
 		Images:               req.Images,
 		Tags:                 req.Tags,
 		PurchaseType:         req.PurchaseType,

@@ -16,6 +16,7 @@ type OrderItem struct {
 	SKUSnapshotJSON              JSON           `gorm:"type:json" json:"sku_snapshot"`                                          // SKU 快照（编码/规格）
 	Tags                         StringArray    `gorm:"type:json" json:"tags"`                                                  // 标签快照
 	UnitPrice                    Money          `gorm:"type:decimal(20,2);not null;default:0" json:"unit_price"`                // 单价
+	CostPrice                    Money          `gorm:"type:decimal(20,2);not null;default:0" json:"cost_price"`                // 成本价快照
 	Quantity                     int            `gorm:"not null" json:"quantity"`                                               // 数量
 	TotalPrice                   Money          `gorm:"type:decimal(20,2);not null;default:0" json:"total_price"`               // 小计
 	CouponDiscount               Money          `gorm:"type:decimal(20,2);not null;default:0" json:"coupon_discount_amount"`    // 优惠券分摊金额
