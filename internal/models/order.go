@@ -76,3 +76,13 @@ func (o *Order) MaskUpstreamFulfillmentType() {
 		o.Children[i].MaskUpstreamFulfillmentType()
 	}
 }
+
+// TruncateFulfillmentPayload 截断订单及子订单中超长的交付内容，防止前端渲染崩溃。
+func (o *Order) TruncateFulfillmentPayload() {
+	if o.Fulfillment != nil {
+		o.Fulfillment.TruncatePayload(FulfillmentPayloadMaxPreviewLines)
+	}
+	for i := range o.Children {
+		o.Children[i].TruncateFulfillmentPayload()
+	}
+}

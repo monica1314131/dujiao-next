@@ -248,6 +248,7 @@ func (h *Handler) AdminGetOrder(c *gin.Context) {
 		})
 	}
 
+	order.TruncateFulfillmentPayload()
 	response.Success(c, AdminOrderDetail{
 		Order:           *order,
 		UserEmail:       email,
@@ -291,4 +292,40 @@ func (h *Handler) AdminUpdateOrderStatus(c *gin.Context) {
 	}
 
 	response.Success(c, order)
+}
+
+// AdminDownloadFulfillment 管理端下载订单交付内容
+func (h *Handler) AdminDownloadFulfillment(c *gin.Context) {
+	orderID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.order_item_invalid", nil)
+		return
+	}
+	order, err := h.OrderService.GetOrderForAdmin(orderID)
+	if err != nil || order == nil {
+		shared.RespondError(c, response.CodeNotFound, "error.order_not_found", nil)
+		return
+	}
+	payload := collectAdminFulfillmentPayload(order)
+	if payload == "" {
+		shared.RespondError(c, response.CodeNotFound, "error.fulfillment_not_found", nil)
+		return
+	}
+	filename := "fulfillment-" + order.OrderNo + ".txt"
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	c.Data(200, "text/plain; charset=utf-8", []byte(payload))
+}
+
+func collectAdminFulfillmentPayload(order *models.Order) string {
+	if order.Fulfillment != nil && order.Fulfillment.Payload != "" {
+		return order.Fulfillment.Payload
+	}
+	var parts []string
+	for _, child := range order.Children {
+		if child.Fulfillment != nil && child.Fulfillment.Payload != "" {
+			parts = append(parts, child.Fulfillment.Payload)
+		}
+	}
+	return strings.Join(parts, "\n")
 }

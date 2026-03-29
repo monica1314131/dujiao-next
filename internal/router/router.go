@@ -96,6 +96,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			guest.POST("/orders/preview", publicHandler.PreviewGuestOrder)
 			guest.GET("/orders", publicHandler.ListGuestOrders)
 			guest.GET("/orders/:id", publicHandler.GetGuestOrder)
+			guest.GET("/orders/:id/fulfillment/download", publicHandler.DownloadGuestFulfillment)
 			guest.GET("/orders/by-order-no/:order_no", publicHandler.GetGuestOrderByOrderNo)
 			guest.POST("/payments", publicHandler.CreateGuestPayment)
 			guest.POST("/payments/:id/capture", publicHandler.CaptureGuestPayment)
@@ -135,6 +136,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			user.POST("/orders/preview", publicHandler.PreviewOrder)
 			user.GET("/orders", publicHandler.ListOrders)
 			user.GET("/orders/:id", publicHandler.GetOrder)
+			user.GET("/orders/:id/fulfillment/download", publicHandler.DownloadFulfillment)
 			user.GET("/orders/by-order-no/:order_no", publicHandler.GetOrderByOrderNo)
 			user.POST("/orders/:id/cancel", publicHandler.CancelOrder)
 			user.POST("/payments", publicHandler.CreatePayment)
@@ -328,6 +330,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				// 订单管理
 				authorized.GET("/orders", adminHandler.AdminListOrders)
 				authorized.GET("/orders/:id", adminHandler.AdminGetOrder)
+				authorized.GET("/orders/:id/fulfillment/download", adminHandler.AdminDownloadFulfillment)
 				authorized.PATCH("/orders/:id", adminHandler.AdminUpdateOrderStatus)
 				authorized.POST("/orders/:id/refund-to-wallet", adminHandler.AdminRefundOrderToWallet)
 				authorized.POST("/fulfillments", adminHandler.AdminCreateFulfillment)
@@ -422,6 +425,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				// 采购单管理
 				authorized.GET("/procurement-orders", adminHandler.GetProcurementOrders)
 				authorized.GET("/procurement-orders/:id", adminHandler.GetProcurementOrder)
+				authorized.GET("/procurement-orders/:id/upstream-payload/download", adminHandler.DownloadProcurementUpstreamPayload)
 				authorized.POST("/procurement-orders/:id/retry", adminHandler.RetryProcurementOrder)
 				authorized.POST("/procurement-orders/:id/cancel", adminHandler.CancelProcurementOrder)
 

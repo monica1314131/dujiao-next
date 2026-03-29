@@ -7,6 +7,7 @@ import (
 
 	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/http/response"
+	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/repository"
 	"github.com/dujiao-next/internal/service"
 
@@ -76,7 +77,34 @@ func (h *Handler) GetProcurementOrder(c *gin.Context) {
 		shared.RespondError(c, response.CodeNotFound, "error.procurement_not_found", nil)
 		return
 	}
+	order.TruncateUpstreamPayload(models.FulfillmentPayloadMaxPreviewLines)
 	response.Success(c, order)
+}
+
+// DownloadProcurementUpstreamPayload 下载采购单上游交付内容
+func (h *Handler) DownloadProcurementUpstreamPayload(c *gin.Context) {
+	if h.ProcurementOrderService == nil {
+		shared.RespondErrorWithMsg(c, response.CodeInternal, "service not available", nil)
+		return
+	}
+	id, err := shared.ParseParamUint(c, "id")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
+	}
+	order, err := h.ProcurementOrderService.GetByID(id)
+	if err != nil || order == nil {
+		shared.RespondError(c, response.CodeNotFound, "error.procurement_not_found", nil)
+		return
+	}
+	if order.UpstreamPayload == "" {
+		shared.RespondError(c, response.CodeNotFound, "error.fulfillment_not_found", nil)
+		return
+	}
+	filename := "upstream-payload-" + strconv.FormatUint(uint64(order.ID), 10) + ".txt"
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	c.Data(200, "text/plain; charset=utf-8", []byte(order.UpstreamPayload))
 }
 
 // RetryProcurementOrder 手动重试采购单

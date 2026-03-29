@@ -998,7 +998,36 @@ func (h *Handler) GetGuestOrderByOrderNo(c *gin.Context) {
 	}
 	order.MaskUpstreamFulfillmentType()
 	order.StripCostPrice()
+	order.TruncateFulfillmentPayload()
 	response.Success(c, order)
+}
+
+// DownloadGuestFulfillment 下载订单交付内容（游客）
+// 支持传入父订单 ID 或子订单 ID
+func (h *Handler) DownloadGuestFulfillment(c *gin.Context) {
+	email := strings.TrimSpace(c.Query("email"))
+	password := strings.TrimSpace(c.Query("order_password"))
+	if email == "" || password == "" {
+		shared.RespondError(c, response.CodeBadRequest, "error.guest_email_required", nil)
+		return
+	}
+	orderID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.order_item_invalid", nil)
+		return
+	}
+	// 先按父订单查找
+	order, err := h.OrderService.GetOrderByGuest(orderID, email, password)
+	if err != nil || order == nil {
+		// 可能是子订单 ID，通过 repo 直接查找并验证游客身份
+		raw, rawErr := h.OrderRepo.GetByID(orderID)
+		if rawErr != nil || raw == nil || raw.GuestEmail != email || raw.GuestPassword != password {
+			shared.RespondError(c, response.CodeNotFound, "error.guest_order_not_found", nil)
+			return
+		}
+		order = raw
+	}
+	respondFulfillmentDownload(c, order)
 }
 
 // CreateGuestPaymentRequest 游客发起支付请求

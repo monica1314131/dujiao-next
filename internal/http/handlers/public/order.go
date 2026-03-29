@@ -269,6 +269,7 @@ func (h *Handler) GetOrder(c *gin.Context) {
 
 	order.MaskUpstreamFulfillmentType()
 	order.StripCostPrice()
+	order.TruncateFulfillmentPayload()
 	response.Success(c, order)
 }
 
@@ -297,6 +298,7 @@ func (h *Handler) GetOrderByOrderNo(c *gin.Context) {
 
 	order.MaskUpstreamFulfillmentType()
 	order.StripCostPrice()
+	order.TruncateFulfillmentPayload()
 	response.Success(c, order)
 }
 
@@ -329,4 +331,55 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 	order.MaskUpstreamFulfillmentType()
 	order.StripCostPrice()
 	response.Success(c, order)
+}
+
+// DownloadFulfillment 下载订单交付内容（登录用户）
+// 支持传入父订单 ID 或子订单 ID
+func (h *Handler) DownloadFulfillment(c *gin.Context) {
+	uid, ok := shared.GetUserID(c)
+	if !ok {
+		return
+	}
+	orderID, err := shared.ParseParamUint(c, "id")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.order_item_invalid", nil)
+		return
+	}
+	// 先按父订单查找
+	order, err := h.OrderService.GetOrderByUser(orderID, uid)
+	if err != nil || order == nil {
+		// 可能是子订单 ID，通过 repo 直接查找并验证 user_id
+		raw, rawErr := h.OrderRepo.GetByID(orderID)
+		if rawErr != nil || raw == nil || raw.UserID != uid {
+			shared.RespondError(c, response.CodeNotFound, "error.order_not_found", nil)
+			return
+		}
+		order = raw
+	}
+	respondFulfillmentDownload(c, order)
+}
+
+func respondFulfillmentDownload(c *gin.Context, order *models.Order) {
+	payload := collectFulfillmentPayload(order)
+	if payload == "" {
+		shared.RespondError(c, response.CodeNotFound, "error.fulfillment_not_found", nil)
+		return
+	}
+	filename := "fulfillment-" + order.OrderNo + ".txt"
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	c.Data(200, "text/plain; charset=utf-8", []byte(payload))
+}
+
+func collectFulfillmentPayload(order *models.Order) string {
+	if order.Fulfillment != nil && order.Fulfillment.Payload != "" {
+		return order.Fulfillment.Payload
+	}
+	var parts []string
+	for _, child := range order.Children {
+		if child.Fulfillment != nil && child.Fulfillment.Payload != "" {
+			parts = append(parts, child.Fulfillment.Payload)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
