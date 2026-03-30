@@ -27,7 +27,7 @@ const (
 // PublicSKUView 公共 SKU 响应结构，在原始 SKU 基础上附加促销价
 type PublicSKUView struct {
 	models.ProductSKU
-	CostPriceAmount      models.Money  `json:"-"` // 隐藏成本价
+	CostPriceAmount      *models.Money `json:"cost_price_amount,omitempty"` // 遮蔽嵌入字段，前台不暴露成本价
 	PromotionPriceAmount *models.Money `json:"promotion_price_amount,omitempty"`
 	MemberPriceAmount    *models.Money `json:"member_price_amount,omitempty"`
 }
@@ -51,7 +51,7 @@ type PromotionRuleView struct {
 // PublicProductView 公共商品响应结构
 type PublicProductView struct {
 	models.Product
-	CostPriceAmount      models.Money           `json:"-"` // 隐藏成本价
+	CostPriceAmount      *struct{}              `json:"cost_price_amount,omitempty"` // 遮蔽嵌入字段，前台不暴露成本价
 	PromotionID          *uint                  `json:"promotion_id,omitempty"`
 	PromotionName        string                 `json:"promotion_name,omitempty"`
 	PromotionType        string                 `json:"promotion_type,omitempty"`
