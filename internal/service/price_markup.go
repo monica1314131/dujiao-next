@@ -8,6 +8,16 @@ var (
 	roundScale = int32(2)
 )
 
+// convertCurrency 仅按汇率转换，不应用加价。
+// 用于计算成本价：上游价格 × 汇率 = 本地币种成本（不含加价利润）。
+// exchangeRate 为 0 或负数时视为 1（同币种）。
+func convertCurrency(upstreamPrice, exchangeRate decimal.Decimal) decimal.Decimal {
+	if exchangeRate.LessThanOrEqual(decimal.Zero) {
+		exchangeRate = decimal.NewFromInt(1)
+	}
+	return upstreamPrice.Mul(exchangeRate)
+}
+
 // CalculateLocalPrice 先按汇率转换，再应用加价和取整。
 // 计算链路：上游价格 × 汇率 → 加价 → 取整 → 本地售价。
 // exchangeRate 为 0 或负数时视为 1（同币种）。

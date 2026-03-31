@@ -114,7 +114,7 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 	roundingMode := conn.PriceRoundingMode
 
 	priceAmount, _ := decimal.NewFromString(upProduct.PriceAmount)
-	costPriceAmount := priceAmount // 成本价 = 上游原始价格（不加价）
+	costPriceAmount := convertCurrency(priceAmount, exchangeRate) // 成本价 = 上游价格 × 汇率（本地币种，不含加价）
 	priceAmount = CalculateLocalPrice(priceAmount, exchangeRate, markupPercent, roundingMode)
 	if priceAmount.LessThanOrEqual(decimal.Zero) && len(upProduct.SKUs) > 0 {
 		// 取转换加价后 SKU 最低价
@@ -123,7 +123,7 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 			localPrice := CalculateLocalPrice(skuPrice, exchangeRate, markupPercent, roundingMode)
 			if localPrice.GreaterThan(decimal.Zero) && (priceAmount.IsZero() || localPrice.LessThan(priceAmount)) {
 				priceAmount = localPrice
-				costPriceAmount = skuPrice
+				costPriceAmount = convertCurrency(skuPrice, exchangeRate)
 			}
 		}
 	}
@@ -176,7 +176,7 @@ func (s *ProductMappingService) ImportUpstreamProduct(connectionID uint, upstrea
 				SKUCode:         upSKU.SKUCode,
 				SpecValuesJSON:  upSKU.SpecValues,
 				PriceAmount:     models.NewMoneyFromDecimal(localPrice.Round(2)),
-				CostPriceAmount: models.NewMoneyFromDecimal(skuPrice.Round(2)), // 成本价 = 上游原始价格
+				CostPriceAmount: models.NewMoneyFromDecimal(convertCurrency(skuPrice, exchangeRate).Round(2)), // 成本价 = 上游价格 × 汇率（本地币种）
 				IsActive:        upSKU.IsActive,
 				SortOrder:       0,
 			}
@@ -470,10 +470,11 @@ func (s *ProductMappingService) SyncProduct(mappingID uint) error {
 		if localSKU != nil {
 			localSKU.SpecValuesJSON = upSKU.SpecValues
 			localSKU.IsActive = upSKU.IsActive
-			// 如果启用了自动同步价格，按加价比例更新本地售价
+			// 如果启用了自动同步价格，按加价比例更新本地售价和成本价
 			if conn.AutoSyncPrice {
 				newLocalPrice := CalculateLocalPrice(upPrice, conn.ExchangeRate, conn.PriceMarkupPercent, conn.PriceRoundingMode)
 				localSKU.PriceAmount = models.NewMoneyFromDecimal(newLocalPrice.Round(2))
+				localSKU.CostPriceAmount = models.NewMoneyFromDecimal(convertCurrency(upPrice, conn.ExchangeRate).Round(2))
 			}
 			_ = s.productSKURepo.Update(localSKU)
 		}
@@ -492,7 +493,7 @@ func (s *ProductMappingService) SyncProduct(mappingID uint) error {
 			SKUCode:         upSKU.SKUCode,
 			SpecValuesJSON:  upSKU.SpecValues,
 			PriceAmount:     models.NewMoneyFromDecimal(localPrice.Round(2)),
-			CostPriceAmount: models.NewMoneyFromDecimal(skuPrice.Round(2)), // 成本价 = 上游原始价格
+			CostPriceAmount: models.NewMoneyFromDecimal(convertCurrency(skuPrice, conn.ExchangeRate).Round(2)), // 成本价 = 上游价格 × 汇率（本地币种）
 			IsActive:        upSKU.IsActive,
 			SortOrder:       0,
 		}
@@ -655,7 +656,7 @@ func (s *ProductMappingService) ReapplyMarkup(connectionID uint) (int, error) {
 				continue
 			}
 			localSKU.PriceAmount = models.NewMoneyFromDecimal(newLocalPrice.Round(2))
-			localSKU.CostPriceAmount = sm.UpstreamPrice // 成本价 = 上游原始价格
+			localSKU.CostPriceAmount = models.NewMoneyFromDecimal(convertCurrency(sm.UpstreamPrice.Decimal, conn.ExchangeRate).Round(2)) // 成本价 = 上游价格 × 汇率（本地币种）
 			_ = s.productSKURepo.Update(localSKU)
 		}
 
