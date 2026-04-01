@@ -1,9 +1,16 @@
 package service
 
 import (
-	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/dujiao-next/internal/logger"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/repository"
 )
@@ -61,18 +68,77 @@ func (s *MediaService) RecordMedia(result *UploadResult, scene string) (*models.
 	return media, nil
 }
 
+// RecordLocalFile 将本地已存在的文件记录到素材库（用于下载的上游图片等）
+// localPath 格式如 /uploads/upstream/uuid.jpg，scene 如 "upstream"
+func (s *MediaService) RecordLocalFile(localPath, scene string) {
+	// 去重
+	existing, _ := s.repo.GetByPath(localPath)
+	if existing != nil {
+		return
+	}
+
+	// 本地物理路径：去掉开头的 /
+	diskPath := strings.TrimPrefix(localPath, "/")
+	fi, err := os.Stat(diskPath)
+	if err != nil {
+		return
+	}
+
+	filename := filepath.Base(localPath)
+	name := filename
+	if idx := strings.LastIndex(name, "."); idx > 0 {
+		name = name[:idx]
+	}
+
+	// 检测 MIME 类型
+	mimeType := "application/octet-stream"
+	if f, err := os.Open(diskPath); err == nil {
+		buf := make([]byte, 512)
+		if n, _ := f.Read(buf); n > 0 {
+			mimeType = http.DetectContentType(buf[:n])
+		}
+		f.Close()
+	}
+
+	// 尝试获取图片尺寸
+	var width, height int
+	if strings.HasPrefix(mimeType, "image/") && mimeType != "image/svg+xml" {
+		if f, err := os.Open(diskPath); err == nil {
+			if cfg, _, err := image.DecodeConfig(f); err == nil {
+				width = cfg.Width
+				height = cfg.Height
+			}
+			f.Close()
+		}
+	}
+
+	media := &models.Media{
+		Name:     name,
+		Filename: filename,
+		Path:     localPath,
+		MimeType: mimeType,
+		Size:     fi.Size(),
+		Scene:    scene,
+		Width:    width,
+		Height:   height,
+	}
+	if err := s.repo.Create(media); err != nil {
+		logger.Warnw("media_record_local_file_failed", "path", localPath, "error", err)
+	}
+}
+
 // Rename 重命名素材
 func (s *MediaService) Rename(id uint, name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return fmt.Errorf("素材名称不能为空")
+		return ErrMediaNameEmpty
 	}
 	media, err := s.repo.GetByID(id)
 	if err != nil {
 		return err
 	}
 	if media == nil {
-		return fmt.Errorf("素材不存在")
+		return ErrMediaNotFound
 	}
 	media.Name = name
 	return s.repo.Update(media)
@@ -85,7 +151,7 @@ func (s *MediaService) Delete(id uint) error {
 		return err
 	}
 	if media == nil {
-		return fmt.Errorf("素材不存在")
+		return ErrMediaNotFound
 	}
 	return s.repo.Delete(id)
 }

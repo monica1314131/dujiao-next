@@ -36,6 +36,7 @@ type ProductMappingService struct {
 	productSKURepo repository.ProductSKURepository
 	categoryRepo   repository.CategoryRepository
 	connService    *SiteConnectionService
+	mediaService   *MediaService
 }
 
 // NewProductMappingService 创建商品映射服务
@@ -55,6 +56,11 @@ func NewProductMappingService(
 		categoryRepo:   categoryRepo,
 		connService:    connService,
 	}
+}
+
+// SetMediaService 设置素材服务（避免循环依赖）
+func (s *ProductMappingService) SetMediaService(ms *MediaService) {
+	s.mediaService = ms
 }
 
 // ImportUpstreamProduct 从上游导入商品（克隆为本地商品 + 建立映射）
@@ -294,6 +300,9 @@ func (s *ProductMappingService) downloadImages(ctx context.Context, adapter upst
 			localImages = append(localImages, img)
 			continue
 		}
+		if s.mediaService != nil {
+			s.mediaService.RecordLocalFile(localPath, "upstream")
+		}
 		localImages = append(localImages, localPath)
 	}
 	return localImages
@@ -338,6 +347,9 @@ func (s *ProductMappingService) downloadContentImages(ctx context.Context, adapt
 		if err != nil {
 			downloaded[url] = url // 失败保留原始
 		} else {
+			if s.mediaService != nil {
+				s.mediaService.RecordLocalFile(localPath, "upstream")
+			}
 			downloaded[url] = localPath
 		}
 	}

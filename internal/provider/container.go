@@ -299,5 +299,6 @@ func (c *Container) initServices() {
 	c.FulfillmentService.SetDownstreamCallbackService(c.DownstreamCallbackService)
 	c.ProcurementOrderService.SetDownstreamCallbackService(c.DownstreamCallbackService)
 	c.MediaService = service.NewMediaService(c.MediaRepo)
+	c.ProductMappingService.SetMediaService(c.MediaService)
 	c.AdProxyService = service.NewAdProxyService()
 }
