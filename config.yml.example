@@ -132,3 +132,4 @@ email:
 
 order:
   payment_expire_minutes: 15
+  max_refund_days: 30

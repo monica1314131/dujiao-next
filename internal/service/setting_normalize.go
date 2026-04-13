@@ -33,7 +33,8 @@ func normalizeSettingValueByKey(key string, value map[string]interface{}) models
 		setting := dashboardSettingFromJSON(models.JSON(value), DashboardDefaultSetting())
 		return DashboardSettingToMap(setting)
 	case constants.SettingKeyOrderConfig:
-		return normalizeOrderSetting(value)
+		cfg := orderConfigFromJSON(models.JSON(value), DefaultOrderConfig())
+		return OrderConfigToMap(cfg)
 	case constants.SettingKeySiteConfig:
 		return normalizeSiteSetting(value)
 	case constants.SettingKeyTelegramAuthConfig:
@@ -58,28 +59,6 @@ func normalizeSettingValueByKey(key string, value map[string]interface{}) models
 	default:
 		return models.JSON(value)
 	}
-}
-
-// normalizeOrderSetting 归一化订单设置。
-func normalizeOrderSetting(value map[string]interface{}) models.JSON {
-	normalized := make(models.JSON, len(value)+1)
-	for key, raw := range value {
-		normalized[key] = raw
-	}
-
-	expireMinutes := 15
-	if raw, ok := value[constants.SettingFieldPaymentExpireMinutes]; ok {
-		if parsed, err := parseSettingInt(raw); err == nil {
-			if parsed > 0 {
-				expireMinutes = parsed
-			}
-		}
-	}
-	if expireMinutes > 10080 {
-		expireMinutes = 10080
-	}
-	normalized[constants.SettingFieldPaymentExpireMinutes] = expireMinutes
-	return normalized
 }
 
 // normalizeSiteSetting 归一化站点配置结构。

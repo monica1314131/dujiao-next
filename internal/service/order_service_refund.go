@@ -52,6 +52,7 @@ type OrderRefundService struct {
 	userRepo              repository.UserRepository
 	orderRefundRecordRepo repository.OrderRefundRecordRepository
 	affiliateSvc          *AffiliateService
+	settingService        *SettingService
 }
 
 // OrderStatusEmailRefundDetails 订单状态邮件中的退款信息
@@ -90,12 +91,14 @@ func NewOrderRefundService(
 	userRepo repository.UserRepository,
 	orderRefundRecordRepo repository.OrderRefundRecordRepository,
 	affiliateSvc *AffiliateService,
+	settingService *SettingService,
 ) *OrderRefundService {
 	return &OrderRefundService{
 		orderRepo:             orderRepo,
 		userRepo:              userRepo,
 		orderRefundRecordRepo: orderRefundRecordRepo,
 		affiliateSvc:          affiliateSvc,
+		settingService:        settingService,
 	}
 }
 
@@ -232,6 +235,17 @@ func (s *OrderRefundService) AdminManualRefund(input AdminManualRefundInput) (*m
 		}
 		if order.PaidAt == nil {
 			return ErrOrderStatusInvalid
+		}
+		cfg := DefaultOrderRefundConfig()
+		if s.settingService != nil {
+			cfgLoaded, cfgErr := s.settingService.GetOrderRefundConfig()
+			if cfgErr != nil {
+				return cfgErr
+			}
+			cfg = cfgLoaded
+		}
+		if isOrderRefundWindowExpired(&order, cfg.MaxRefundDays, time.Now()) {
+			return ErrOrderRefundExpired
 		}
 		if order.TotalAmount.Decimal.LessThanOrEqual(decimal.Zero) {
 			return ErrOrderStatusInvalid

@@ -57,7 +57,7 @@ func setupAdminOrderRefundHandlerTest(t *testing.T) (*Handler, *gorm.DB) {
 	orderRefundRecordRepo := repository.NewOrderRefundRecordRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	affiliateSvc := service.NewAffiliateService(repository.NewAffiliateRepository(db), nil, nil, nil, nil)
-	orderRefundService := service.NewOrderRefundService(orderRepo, userRepo, orderRefundRecordRepo, affiliateSvc)
+	orderRefundService := service.NewOrderRefundService(orderRepo, userRepo, orderRefundRecordRepo, affiliateSvc, nil)
 
 	h := &Handler{Container: &provider.Container{
 		OrderRepo:             orderRepo,

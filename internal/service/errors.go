@@ -82,6 +82,7 @@ var (
 	ErrProductNotAvailable                 = errors.New("product not available")
 	ErrProductPurchaseNotAllowed           = errors.New("product purchase not allowed")
 	ErrOrderStatusInvalid                  = errors.New("order status invalid")
+	ErrOrderRefundExpired                  = errors.New("order refund expired")
 	ErrOrderCancelNotAllowed               = errors.New("order cancel not allowed")
 	ErrOrderUpdateFailed                   = errors.New("order update failed")
 	ErrGuestOrderNotFound                  = errors.New("guest order not found")

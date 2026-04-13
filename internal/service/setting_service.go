@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/dujiao-next/internal/config"
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/repository"
@@ -70,28 +71,23 @@ func (s *SettingService) Update(key string, value map[string]interface{}) (model
 
 // GetOrderPaymentExpireMinutes 获取订单超时分钟配置
 func (s *SettingService) GetOrderPaymentExpireMinutes(defaultValue int) (int, error) {
+	fallback := defaultValue
+	if fallback < orderPaymentExpireMinutesMin {
+		fallback = orderPaymentExpireMinutesDefault
+	}
+	if fallback > orderPaymentExpireMinutesMax {
+		fallback = orderPaymentExpireMinutesMax
+	}
 	if s == nil {
-		return defaultValue, nil
+		return fallback, nil
 	}
-	value, err := s.GetByKey(constants.SettingKeyOrderConfig)
+	cfg, err := s.GetOrderConfig(config.OrderConfig{
+		PaymentExpireMinutes: fallback,
+	})
 	if err != nil {
-		return defaultValue, err
+		return fallback, err
 	}
-	if value == nil {
-		return defaultValue, nil
-	}
-	raw, ok := value[constants.SettingFieldPaymentExpireMinutes]
-	if !ok {
-		return defaultValue, nil
-	}
-	minutes, err := parseSettingInt(raw)
-	if err != nil {
-		return defaultValue, err
-	}
-	if minutes <= 0 {
-		return defaultValue, nil
-	}
-	return minutes, nil
+	return cfg.PaymentExpireMinutes, nil
 }
 
 // GetRegistrationEnabled 获取注册开关

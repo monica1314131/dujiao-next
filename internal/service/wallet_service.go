@@ -20,10 +20,11 @@ const (
 
 // WalletService 钱包服务
 type WalletService struct {
-	walletRepo   repository.WalletRepository
-	orderRepo    repository.OrderRepository
-	userRepo     repository.UserRepository
-	affiliateSvc *AffiliateService
+	walletRepo     repository.WalletRepository
+	orderRepo      repository.OrderRepository
+	userRepo       repository.UserRepository
+	affiliateSvc   *AffiliateService
+	settingService *SettingService
 }
 
 // WalletRechargeInput 用户充值输入
@@ -66,12 +67,14 @@ func NewWalletService(
 	orderRepo repository.OrderRepository,
 	userRepo repository.UserRepository,
 	affiliateSvc *AffiliateService,
+	settingService *SettingService,
 ) *WalletService {
 	return &WalletService{
-		walletRepo:   walletRepo,
-		orderRepo:    orderRepo,
-		userRepo:     userRepo,
-		affiliateSvc: affiliateSvc,
+		walletRepo:     walletRepo,
+		orderRepo:      orderRepo,
+		userRepo:       userRepo,
+		affiliateSvc:   affiliateSvc,
+		settingService: settingService,
 	}
 }
 
@@ -212,6 +215,17 @@ func (s *WalletService) AdminRefundToWallet(input AdminRefundToWalletInput) (*mo
 		}
 		if order.PaidAt == nil {
 			return ErrOrderStatusInvalid
+		}
+		cfg := DefaultOrderRefundConfig()
+		if s.settingService != nil {
+			cfgLoaded, cfgErr := s.settingService.GetOrderRefundConfig()
+			if cfgErr != nil {
+				return cfgErr
+			}
+			cfg = cfgLoaded
+		}
+		if isOrderRefundWindowExpired(&order, cfg.MaxRefundDays, time.Now()) {
+			return ErrOrderRefundExpired
 		}
 		if order.TotalAmount.Decimal.LessThanOrEqual(decimal.Zero) {
 			return ErrOrderStatusInvalid
