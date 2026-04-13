@@ -54,6 +54,8 @@ func BuiltinRoleSeeds() []RoleSeed {
 				{Object: "/admin/gift-cards/batch-status", Action: "PATCH"},
 				{Object: "/admin/gift-cards/export", Action: "POST"},
 				{Object: "/admin/upload", Action: "POST"},
+				{Object: "/admin/media/:id", Action: "PUT"},
+				{Object: "/admin/media/:id", Action: "DELETE"},
 				{Object: "/admin/affiliates/users", Action: "GET"},
 				{Object: "/admin/affiliates/users/:id/status", Action: "PATCH"},
 				{Object: "/admin/affiliates/users/batch-status", Action: "PATCH"},
