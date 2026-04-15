@@ -128,6 +128,7 @@ type QueueConfig struct {
 // OrderConfig 订单配置
 type OrderConfig struct {
 	PaymentExpireMinutes int `mapstructure:"payment_expire_minutes"`
+	MaxRefundDays        int `mapstructure:"max_refund_days"`
 }
 
 // EmailConfig 邮件服务配置
@@ -354,6 +355,7 @@ func Load() *Config {
 	viper.SetDefault("email.verify_code.max_attempts", 5)
 	viper.SetDefault("email.verify_code.length", 6)
 	viper.SetDefault("order.payment_expire_minutes", 15)
+	viper.SetDefault("order.max_refund_days", 30)
 	viper.SetDefault("captcha.provider", "none")
 	viper.SetDefault("captcha.scenes.login", false)
 	viper.SetDefault("captcha.scenes.register_send_code", false)

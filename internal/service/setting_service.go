@@ -1,16 +1,45 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
+	"time"
 
+	"github.com/dujiao-next/internal/config"
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/repository"
 )
 
+const (
+	orderConfigFieldPaymentExpireMinutes = "payment_expire_minutes"
+	orderConfigFieldMaxRefundDays        = "max_refund_days"
+
+	orderPaymentExpireMinutesDefault = 15
+	orderPaymentExpireMinutesMin     = 1
+	orderPaymentExpireMinutesMax     = 10080
+
+	orderRefundMaxDaysDefault = 30
+	orderRefundMaxDaysMin     = 0
+	orderRefundMaxDaysMax     = 3650
+)
+
+// OrderConfig 订单配置。
+type OrderConfig struct {
+	PaymentExpireMinutes int `json:"payment_expire_minutes"`
+	MaxRefundDays        int `json:"max_refund_days"`
+}
+
+// OrderRefundConfig 订单退款配置。
+type OrderRefundConfig struct {
+	MaxRefundDays int `json:"max_refund_days"`
+}
+
 // SettingService 设置业务服务
 type SettingService struct {
-	repo repository.SettingRepository
+	repo                  repository.SettingRepository
+	defaultOrderConfig    config.OrderConfig
+	hasDefaultOrderConfig bool
 }
 
 // SiteBrand 站点品牌信息
@@ -19,9 +48,15 @@ type SiteBrand struct {
 	SiteURL  string
 }
 
-// NewSettingService 创建设置服务
-func NewSettingService(repo repository.SettingRepository) *SettingService {
-	return &SettingService{repo: repo}
+// NewSettingService 创建设置服务。
+// 可选传入 order 默认配置，用于在 settings 未配置时回落到 config 的 order 配置。
+func NewSettingService(repo repository.SettingRepository, defaultOrderCfg ...config.OrderConfig) *SettingService {
+	svc := &SettingService{repo: repo}
+	if len(defaultOrderCfg) > 0 {
+		svc.defaultOrderConfig = defaultOrderCfg[0]
+		svc.hasDefaultOrderConfig = true
+	}
+	return svc
 }
 
 // GetConfig 获取站点配置（合并默认值）
@@ -68,30 +103,161 @@ func (s *SettingService) Update(key string, value map[string]interface{}) (model
 	return setting.ValueJSON, nil
 }
 
-// GetOrderPaymentExpireMinutes 获取订单超时分钟配置
-func (s *SettingService) GetOrderPaymentExpireMinutes(defaultValue int) (int, error) {
+// DefaultOrderConfig 默认订单配置。
+func DefaultOrderConfig() OrderConfig {
+	return OrderConfig{
+		PaymentExpireMinutes: orderPaymentExpireMinutesDefault,
+		MaxRefundDays:        orderRefundMaxDaysDefault,
+	}
+}
+
+// NormalizeOrderConfig 归一化订单配置。
+func NormalizeOrderConfig(cfg OrderConfig) OrderConfig {
+	if cfg.PaymentExpireMinutes < orderPaymentExpireMinutesMin {
+		cfg.PaymentExpireMinutes = orderPaymentExpireMinutesDefault
+	}
+	if cfg.PaymentExpireMinutes > orderPaymentExpireMinutesMax {
+		cfg.PaymentExpireMinutes = orderPaymentExpireMinutesMax
+	}
+	if cfg.MaxRefundDays < orderRefundMaxDaysMin {
+		cfg.MaxRefundDays = orderRefundMaxDaysDefault
+	}
+	if cfg.MaxRefundDays > orderRefundMaxDaysMax {
+		cfg.MaxRefundDays = orderRefundMaxDaysMax
+	}
+	return cfg
+}
+
+// DefaultOrderRefundConfig 默认订单退款配置。
+func DefaultOrderRefundConfig() OrderRefundConfig {
+	return OrderRefundConfig{
+		MaxRefundDays: DefaultOrderConfig().MaxRefundDays,
+	}
+}
+
+// NormalizeOrderRefundConfig 归一化订单退款配置。
+func NormalizeOrderRefundConfig(cfg OrderRefundConfig) OrderRefundConfig {
+	normalized := NormalizeOrderConfig(OrderConfig{
+		PaymentExpireMinutes: DefaultOrderConfig().PaymentExpireMinutes,
+		MaxRefundDays:        cfg.MaxRefundDays,
+	})
+	return OrderRefundConfig{MaxRefundDays: normalized.MaxRefundDays}
+}
+
+// orderConfigFromJSON 从 JSON map 解析订单配置。
+func orderConfigFromJSON(raw models.JSON, fallback OrderConfig) OrderConfig {
+	result := NormalizeOrderConfig(fallback)
+	if raw == nil {
+		return result
+	}
+	if parsed, err := parseSettingInt(raw[orderConfigFieldPaymentExpireMinutes]); err == nil {
+		result.PaymentExpireMinutes = parsed
+	}
+	if parsed, err := parseSettingInt(raw[orderConfigFieldMaxRefundDays]); err == nil {
+		result.MaxRefundDays = parsed
+	}
+	return NormalizeOrderConfig(result)
+}
+
+// OrderConfigToMap 将订单配置转为 map 用于存储。
+func OrderConfigToMap(cfg OrderConfig) models.JSON {
+	normalized := NormalizeOrderConfig(cfg)
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return models.JSON{}
+	}
+	var result models.JSON
+	_ = json.Unmarshal(data, &result)
+	return result
+}
+
+func defaultOrderConfigWithFallback(defaultCfg config.OrderConfig, serviceDefault config.OrderConfig, useServiceDefault bool) OrderConfig {
+	cfg := DefaultOrderConfig()
+	if useServiceDefault {
+		if serviceDefault.PaymentExpireMinutes > 0 {
+			cfg.PaymentExpireMinutes = serviceDefault.PaymentExpireMinutes
+		}
+		if serviceDefault.MaxRefundDays >= orderRefundMaxDaysMin && serviceDefault.MaxRefundDays <= orderRefundMaxDaysMax {
+			cfg.MaxRefundDays = serviceDefault.MaxRefundDays
+		}
+	}
+	if defaultCfg.PaymentExpireMinutes > 0 {
+		cfg.PaymentExpireMinutes = defaultCfg.PaymentExpireMinutes
+	}
+	// 0 表示不限制，仅当显式传入正数时覆盖服务默认值（服务默认值可由 config.yaml 提供 0）。
+	if defaultCfg.MaxRefundDays > 0 {
+		cfg.MaxRefundDays = defaultCfg.MaxRefundDays
+	}
+	return NormalizeOrderConfig(cfg)
+}
+
+// GetOrderConfig 获取订单配置。
+func (s *SettingService) GetOrderConfig(defaultCfg config.OrderConfig) (OrderConfig, error) {
+	var serviceDefault config.OrderConfig
+	useServiceDefault := false
+	if s != nil {
+		serviceDefault = s.defaultOrderConfig
+		useServiceDefault = s.hasDefaultOrderConfig
+	}
+	fallback := defaultOrderConfigWithFallback(defaultCfg, serviceDefault, useServiceDefault)
 	if s == nil {
-		return defaultValue, nil
+		return fallback, nil
 	}
 	value, err := s.GetByKey(constants.SettingKeyOrderConfig)
 	if err != nil {
-		return defaultValue, err
+		return fallback, err
 	}
-	if value == nil {
-		return defaultValue, nil
-	}
-	raw, ok := value[constants.SettingFieldPaymentExpireMinutes]
-	if !ok {
-		return defaultValue, nil
-	}
-	minutes, err := parseSettingInt(raw)
+	return orderConfigFromJSON(value, fallback), nil
+}
+
+// GetOrderRefundConfig 获取订单退款配置。
+func (s *SettingService) GetOrderRefundConfig() (OrderRefundConfig, error) {
+	fallback := DefaultOrderRefundConfig()
+	cfg, err := s.GetOrderConfig(config.OrderConfig{})
 	if err != nil {
-		return defaultValue, err
+		return fallback, err
 	}
-	if minutes <= 0 {
-		return defaultValue, nil
+	return OrderRefundConfig{MaxRefundDays: cfg.MaxRefundDays}, nil
+}
+
+// isOrderRefundWindowExpired 判断订单是否已超过可退款时间窗口（优先 paid_at，其次 created_at）。
+func isOrderRefundWindowExpired(order *models.Order, maxRefundDays int, now time.Time) bool {
+	normalizedDays := NormalizeOrderRefundConfig(OrderRefundConfig{
+		MaxRefundDays: maxRefundDays,
+	}).MaxRefundDays
+	if order == nil || normalizedDays == 0 {
+		return false
 	}
-	return minutes, nil
+	baseAt := order.CreatedAt
+	if order.PaidAt != nil && !order.PaidAt.IsZero() {
+		baseAt = *order.PaidAt
+	}
+	if baseAt.IsZero() {
+		return false
+	}
+	deadline := baseAt.AddDate(0, 0, normalizedDays)
+	return now.After(deadline)
+}
+
+// GetOrderPaymentExpireMinutes 获取订单超时分钟配置
+func (s *SettingService) GetOrderPaymentExpireMinutes(defaultValue int) (int, error) {
+	fallback := defaultValue
+	if fallback < orderPaymentExpireMinutesMin {
+		fallback = orderPaymentExpireMinutesDefault
+	}
+	if fallback > orderPaymentExpireMinutesMax {
+		fallback = orderPaymentExpireMinutesMax
+	}
+	if s == nil {
+		return fallback, nil
+	}
+	cfg, err := s.GetOrderConfig(config.OrderConfig{
+		PaymentExpireMinutes: fallback,
+	})
+	if err != nil {
+		return fallback, err
+	}
+	return cfg.PaymentExpireMinutes, nil
 }
 
 // GetRegistrationEnabled 获取注册开关

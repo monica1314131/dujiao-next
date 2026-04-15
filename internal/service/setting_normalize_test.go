@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"github.com/dujiao-next/internal/config"
 	"github.com/dujiao-next/internal/constants"
 )
 
@@ -25,8 +26,8 @@ func TestUpdateOrderSettingNormalized(t *testing.T) {
 	if minutes != 10080 {
 		t.Fatalf("unexpected payment_expire_minutes, expected 10080 got %d", minutes)
 	}
-	if result["extra"] != "keep" {
-		t.Fatalf("unexpected extra field: %v", result["extra"])
+	if _, ok := result["extra"]; ok {
+		t.Fatalf("unexpected extra field kept in normalized order config: %v", result["extra"])
 	}
 }
 
@@ -382,6 +383,125 @@ func TestUpdateSiteSettingNormalizedCurrency(t *testing.T) {
 	}
 	if result[constants.SettingFieldSiteCurrency] != "USD" {
 		t.Fatalf("unexpected normalized currency: %v", result[constants.SettingFieldSiteCurrency])
+	}
+}
+
+func TestUpdateOrderRefundSettingNormalized(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo)
+
+	result, err := svc.Update(constants.SettingKeyOrderConfig, map[string]interface{}{
+		orderConfigFieldMaxRefundDays: "0",
+	})
+	if err != nil {
+		t.Fatalf("update order refund config failed: %v", err)
+	}
+	maxDays, err := parseSettingInt(result[orderConfigFieldMaxRefundDays])
+	if err != nil {
+		t.Fatalf("parse normalized max_refund_days failed: %v", err)
+	}
+	if maxDays != 0 {
+		t.Fatalf("unexpected normalized max_refund_days: %v", result[orderConfigFieldMaxRefundDays])
+	}
+
+	result, err = svc.Update(constants.SettingKeyOrderConfig, map[string]interface{}{
+		orderConfigFieldMaxRefundDays: "-1",
+	})
+	if err != nil {
+		t.Fatalf("update order refund config failed: %v", err)
+	}
+	maxDays, err = parseSettingInt(result[orderConfigFieldMaxRefundDays])
+	if err != nil {
+		t.Fatalf("parse normalized max_refund_days failed: %v", err)
+	}
+	if maxDays != DefaultOrderRefundConfig().MaxRefundDays {
+		t.Fatalf("unexpected normalized max_refund_days for negative value: %v", result[orderConfigFieldMaxRefundDays])
+	}
+
+	result, err = svc.Update(constants.SettingKeyOrderConfig, map[string]interface{}{
+		orderConfigFieldMaxRefundDays: "5000",
+	})
+	if err != nil {
+		t.Fatalf("update order refund config failed: %v", err)
+	}
+	maxDays, err = parseSettingInt(result[orderConfigFieldMaxRefundDays])
+	if err != nil {
+		t.Fatalf("parse normalized max_refund_days failed: %v", err)
+	}
+	if maxDays != NormalizeOrderRefundConfig(OrderRefundConfig{MaxRefundDays: 5000}).MaxRefundDays {
+		t.Fatalf("unexpected clamped max_refund_days: %v", result[orderConfigFieldMaxRefundDays])
+	}
+}
+
+func TestGetOrderRefundConfig(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo)
+
+	cfg, err := svc.GetOrderRefundConfig()
+	if err != nil {
+		t.Fatalf("get order refund config failed: %v", err)
+	}
+	if cfg.MaxRefundDays != DefaultOrderRefundConfig().MaxRefundDays {
+		t.Fatalf("unexpected default max refund days: %d", cfg.MaxRefundDays)
+	}
+
+	repo.store[constants.SettingKeyOrderConfig] = map[string]interface{}{
+		orderConfigFieldMaxRefundDays: 45,
+	}
+	cfg, err = svc.GetOrderRefundConfig()
+	if err != nil {
+		t.Fatalf("get order refund config failed: %v", err)
+	}
+	if cfg.MaxRefundDays != 45 {
+		t.Fatalf("unexpected max refund days: %d", cfg.MaxRefundDays)
+	}
+}
+
+func TestGetOrderRefundConfigFallsBackToConfigOrder(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo, config.OrderConfig{
+		MaxRefundDays: 7,
+	})
+
+	cfg, err := svc.GetOrderRefundConfig()
+	if err != nil {
+		t.Fatalf("get order refund config failed: %v", err)
+	}
+	if cfg.MaxRefundDays != 7 {
+		t.Fatalf("unexpected max refund days fallback from config order: %d", cfg.MaxRefundDays)
+	}
+}
+
+func TestGetOrderRefundConfigFallsBackToConfigOrderUnlimited(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo, config.OrderConfig{
+		MaxRefundDays: 0,
+	})
+
+	cfg, err := svc.GetOrderRefundConfig()
+	if err != nil {
+		t.Fatalf("get order refund config failed: %v", err)
+	}
+	if cfg.MaxRefundDays != 0 {
+		t.Fatalf("unexpected unlimited max refund days fallback from config order: %d", cfg.MaxRefundDays)
+	}
+}
+
+func TestGetOrderConfigFallsBackToConfigWhenMissing(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo)
+
+	cfg, err := svc.GetOrderConfig(config.OrderConfig{
+		PaymentExpireMinutes: 19,
+	})
+	if err != nil {
+		t.Fatalf("get order config failed: %v", err)
+	}
+	if cfg.PaymentExpireMinutes != 19 {
+		t.Fatalf("unexpected fallback payment_expire_minutes: %d", cfg.PaymentExpireMinutes)
+	}
+	if cfg.MaxRefundDays != DefaultOrderConfig().MaxRefundDays {
+		t.Fatalf("unexpected default max_refund_days: %d", cfg.MaxRefundDays)
 	}
 }
 

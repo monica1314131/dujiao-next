@@ -35,6 +35,7 @@ func setupWalletServiceTest(t *testing.T) (*WalletService, *gorm.DB) {
 		&models.WalletAccount{},
 		&models.WalletTransaction{},
 		&models.OrderRefundRecord{},
+		&models.Setting{},
 	); err != nil {
 		t.Fatalf("auto migrate failed: %v", err)
 	}
@@ -43,7 +44,8 @@ func setupWalletServiceTest(t *testing.T) (*WalletService, *gorm.DB) {
 	orderRepo := repository.NewOrderRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	affiliateSvc := NewAffiliateService(repository.NewAffiliateRepository(db), nil, nil, nil, nil)
-	return NewWalletService(walletRepo, orderRepo, userRepo, affiliateSvc), db
+	settingSvc := NewSettingService(repository.NewSettingRepository(db))
+	return NewWalletService(walletRepo, orderRepo, userRepo, affiliateSvc, settingSvc), db
 }
 
 func createTestUser(t *testing.T, db *gorm.DB, id uint) {
@@ -373,6 +375,62 @@ func TestWalletServiceAdminRefundToWalletRejectUnpaidOrder(t *testing.T) {
 	})
 	if !errors.Is(err, ErrOrderStatusInvalid) {
 		t.Fatalf("expected order status invalid, got: %v", err)
+	}
+}
+
+func TestWalletServiceAdminRefundToWalletExpiredWindow(t *testing.T) {
+	svc, db := setupWalletServiceTest(t)
+	createTestUser(t, db, 111)
+	order := createTestOrder(t, db, 111, "DJTESTREFUND-EXPIRED", decimal.NewFromInt(40))
+	paidAt := time.Now().AddDate(0, 0, -31)
+	if err := db.Model(&models.Order{}).Where("id = ?", order.ID).Updates(map[string]interface{}{
+		"status":  constants.OrderStatusCompleted,
+		"paid_at": paidAt,
+	}).Error; err != nil {
+		t.Fatalf("update order status failed: %v", err)
+	}
+
+	_, _, _, err := svc.AdminRefundToWallet(AdminRefundToWalletInput{
+		OrderID: order.ID,
+		Amount:  models.NewMoneyFromDecimal(decimal.NewFromInt(15)),
+		Remark:  "超时退款",
+	})
+	if !errors.Is(err, ErrOrderRefundExpired) {
+		t.Fatalf("expected order refund expired, got: %v", err)
+	}
+}
+
+func TestWalletServiceAdminRefundToWalletNoLimitWhenZero(t *testing.T) {
+	svc, db := setupWalletServiceTest(t)
+	createTestUser(t, db, 116)
+	order := createTestOrder(t, db, 116, "DJTESTREFUND-NOLIMIT", decimal.NewFromInt(40))
+	paidAt := time.Now().AddDate(0, 0, -90)
+	if err := db.Model(&models.Order{}).Where("id = ?", order.ID).Updates(map[string]interface{}{
+		"status":  constants.OrderStatusCompleted,
+		"paid_at": paidAt,
+	}).Error; err != nil {
+		t.Fatalf("update order status failed: %v", err)
+	}
+
+	if _, err := svc.settingService.Update(constants.SettingKeyOrderConfig, map[string]interface{}{
+		orderConfigFieldMaxRefundDays: 0,
+	}); err != nil {
+		t.Fatalf("update order refund config failed: %v", err)
+	}
+
+	updatedOrder, txn, _, err := svc.AdminRefundToWallet(AdminRefundToWalletInput{
+		OrderID: order.ID,
+		Amount:  models.NewMoneyFromDecimal(decimal.NewFromInt(15)),
+		Remark:  "0天不限制",
+	})
+	if err != nil {
+		t.Fatalf("expected no-limit refund success, got: %v", err)
+	}
+	if txn == nil {
+		t.Fatalf("expected transaction, got nil")
+	}
+	if updatedOrder == nil || updatedOrder.Status != constants.OrderStatusPartiallyRefunded {
+		t.Fatalf("expected partially_refunded order, got %+v", updatedOrder)
 	}
 }
 

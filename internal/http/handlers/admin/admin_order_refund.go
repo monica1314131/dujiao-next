@@ -108,6 +108,8 @@ func (h *Handler) AdminRefundOrderToWallet(c *gin.Context) {
 			shared.RespondError(c, response.CodeNotFound, "error.order_not_found", nil)
 		case errors.Is(err, service.ErrOrderStatusInvalid):
 			shared.RespondError(c, response.CodeBadRequest, "error.order_status_invalid", nil)
+		case errors.Is(err, service.ErrOrderRefundExpired):
+			shared.RespondError(c, response.CodeBadRequest, "error.order_refund_expired", nil)
 		case errors.Is(err, service.ErrWalletInvalidAmount), errors.Is(err, service.ErrWalletRefundExceeded), errors.Is(err, service.ErrWalletNotSupportedForGuest):
 			shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
 		default:
@@ -151,6 +153,8 @@ func (h *Handler) AdminManualRefundOrder(c *gin.Context) {
 			shared.RespondError(c, response.CodeNotFound, "error.order_not_found", nil)
 		case errors.Is(err, service.ErrOrderStatusInvalid):
 			shared.RespondError(c, response.CodeBadRequest, "error.order_status_invalid", nil)
+		case errors.Is(err, service.ErrOrderRefundExpired):
+			shared.RespondError(c, response.CodeBadRequest, "error.order_refund_expired", nil)
 		case errors.Is(err, service.ErrWalletInvalidAmount), errors.Is(err, service.ErrWalletRefundExceeded):
 			shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
 		default:

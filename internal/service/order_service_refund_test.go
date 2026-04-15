@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -34,6 +35,7 @@ func setupOrderRefundServiceTest(t *testing.T) (*OrderRefundService, *gorm.DB) {
 		&models.WalletAccount{},
 		&models.WalletTransaction{},
 		&models.OrderRefundRecord{},
+		&models.Setting{},
 	); err != nil {
 		t.Fatalf("auto migrate failed: %v", err)
 	}
@@ -43,7 +45,8 @@ func setupOrderRefundServiceTest(t *testing.T) (*OrderRefundService, *gorm.DB) {
 	orderRefundRecordRepo := repository.NewOrderRefundRecordRepository(db)
 	affiliateSvc := NewAffiliateService(repository.NewAffiliateRepository(db), nil, nil, nil, nil)
 	userRepo := repository.NewUserRepository(db)
-	return NewOrderRefundService(orderRepo, userRepo, orderRefundRecordRepo, affiliateSvc), db
+	settingSvc := NewSettingService(repository.NewSettingRepository(db))
+	return NewOrderRefundService(orderRepo, userRepo, orderRefundRecordRepo, affiliateSvc, settingSvc), db
 }
 
 func createOrderRefundTestSiteConnection(t *testing.T, db *gorm.DB, id uint) *models.SiteConnection {
@@ -147,6 +150,81 @@ func TestOrderRefundServiceAdminManualRefundGuestCreatesRecord(t *testing.T) {
 	}
 	if refreshedProc.Status != constants.ProcurementStatusFulfilled {
 		t.Fatalf("expected procurement status fulfilled, got: %s", refreshedProc.Status)
+	}
+}
+
+func TestOrderRefundServiceAdminManualRefundExpiredWindow(t *testing.T) {
+	svc, db := setupOrderRefundServiceTest(t)
+	paidAt := time.Now().AddDate(0, 0, -31)
+	order := &models.Order{
+		OrderNo:          "REFUND-MANUAL-EXPIRED-001",
+		UserID:           0,
+		GuestEmail:       "guest-refund-expired@example.com",
+		Status:           constants.OrderStatusCompleted,
+		Currency:         "CNY",
+		OriginalAmount:   models.NewMoneyFromDecimal(decimal.NewFromInt(88)),
+		DiscountAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		TotalAmount:      models.NewMoneyFromDecimal(decimal.NewFromInt(88)),
+		WalletPaidAmount: models.NewMoneyFromDecimal(decimal.Zero),
+		OnlinePaidAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(88)),
+		RefundedAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		PaidAt:           &paidAt,
+		CreatedAt:        paidAt,
+		UpdatedAt:        paidAt,
+	}
+	if err := db.Create(order).Error; err != nil {
+		t.Fatalf("create guest order failed: %v", err)
+	}
+
+	_, _, err := svc.AdminManualRefund(AdminManualRefundInput{
+		OrderID: order.ID,
+		Amount:  models.NewMoneyFromDecimal(decimal.NewFromInt(20)),
+		Remark:  "manual refund expired",
+	})
+	if !errors.Is(err, ErrOrderRefundExpired) {
+		t.Fatalf("expected refund expired, got: %v", err)
+	}
+}
+
+func TestOrderRefundServiceAdminManualRefundNoLimitWhenZero(t *testing.T) {
+	svc, db := setupOrderRefundServiceTest(t)
+	paidAt := time.Now().AddDate(0, 0, -90)
+	order := &models.Order{
+		OrderNo:          "REFUND-MANUAL-NOLIMIT-001",
+		UserID:           0,
+		GuestEmail:       "guest-refund-nolimit@example.com",
+		Status:           constants.OrderStatusCompleted,
+		Currency:         "CNY",
+		OriginalAmount:   models.NewMoneyFromDecimal(decimal.NewFromInt(88)),
+		DiscountAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		TotalAmount:      models.NewMoneyFromDecimal(decimal.NewFromInt(88)),
+		WalletPaidAmount: models.NewMoneyFromDecimal(decimal.Zero),
+		OnlinePaidAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(88)),
+		RefundedAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		PaidAt:           &paidAt,
+		CreatedAt:        paidAt,
+		UpdatedAt:        paidAt,
+	}
+	if err := db.Create(order).Error; err != nil {
+		t.Fatalf("create guest order failed: %v", err)
+	}
+
+	if _, err := svc.settingService.Update(constants.SettingKeyOrderConfig, map[string]interface{}{
+		orderConfigFieldMaxRefundDays: 0,
+	}); err != nil {
+		t.Fatalf("update order refund config failed: %v", err)
+	}
+
+	updatedOrder, _, err := svc.AdminManualRefund(AdminManualRefundInput{
+		OrderID: order.ID,
+		Amount:  models.NewMoneyFromDecimal(decimal.NewFromInt(20)),
+		Remark:  "manual refund no limit",
+	})
+	if err != nil {
+		t.Fatalf("expected no-limit refund success, got: %v", err)
+	}
+	if updatedOrder == nil || updatedOrder.Status != constants.OrderStatusPartiallyRefunded {
+		t.Fatalf("expected partially_refunded order, got %+v", updatedOrder)
 	}
 }
 

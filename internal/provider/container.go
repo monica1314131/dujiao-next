@@ -191,7 +191,7 @@ func (c *Container) initServices() {
 		panic(err)
 	}
 
-	c.SettingService = service.NewSettingService(c.SettingRepo)
+	c.SettingService = service.NewSettingService(c.SettingRepo, c.Config.Order)
 	smtpSetting, err := c.SettingService.GetSMTPSetting(c.Config.Email)
 	if err != nil {
 		logger.Warnw("provider_load_smtp_setting_failed", "error", err)
@@ -224,8 +224,8 @@ func (c *Container) initServices() {
 	c.PostService = service.NewPostService(c.PostRepo)
 	c.CategoryService = service.NewCategoryService(c.CategoryRepo)
 	c.CartService = service.NewCartService(c.CartRepo, c.ProductRepo, c.ProductSKURepo, c.PromotionRepo, c.SettingService)
-	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.UserRepo, c.AffiliateService)
-	c.OrderRefundService = service.NewOrderRefundService(c.OrderRepo, c.UserRepo, c.OrderRefundRecordRepo, c.AffiliateService)
+	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.UserRepo, c.AffiliateService, c.SettingService)
+	c.OrderRefundService = service.NewOrderRefundService(c.OrderRepo, c.UserRepo, c.OrderRefundRecordRepo, c.AffiliateService, c.SettingService)
 	c.MemberLevelService = service.NewMemberLevelService(c.MemberLevelRepo, c.MemberLevelPriceRepo, c.UserRepo)
 	c.OrderRiskControlService = service.NewOrderRiskControlService(c.SettingService, c.OrderRepo)
 	c.OrderService = service.NewOrderService(service.OrderServiceOptions{
