@@ -37,7 +37,9 @@ type OrderRefundConfig struct {
 
 // SettingService 设置业务服务
 type SettingService struct {
-	repo repository.SettingRepository
+	repo                  repository.SettingRepository
+	defaultOrderConfig    config.OrderConfig
+	hasDefaultOrderConfig bool
 }
 
 // SiteBrand 站点品牌信息
@@ -46,9 +48,15 @@ type SiteBrand struct {
 	SiteURL  string
 }
 
-// NewSettingService 创建设置服务
-func NewSettingService(repo repository.SettingRepository) *SettingService {
-	return &SettingService{repo: repo}
+// NewSettingService 创建设置服务。
+// 可选传入 order 默认配置，用于在 settings 未配置时回落到 config 的 order 配置。
+func NewSettingService(repo repository.SettingRepository, defaultOrderCfg ...config.OrderConfig) *SettingService {
+	svc := &SettingService{repo: repo}
+	if len(defaultOrderCfg) > 0 {
+		svc.defaultOrderConfig = defaultOrderCfg[0]
+		svc.hasDefaultOrderConfig = true
+	}
+	return svc
 }
 
 // GetConfig 获取站点配置（合并默认值）
@@ -163,17 +171,35 @@ func OrderConfigToMap(cfg OrderConfig) models.JSON {
 	return result
 }
 
-func defaultOrderConfigWithFallback(defaultCfg config.OrderConfig) OrderConfig {
+func defaultOrderConfigWithFallback(defaultCfg config.OrderConfig, serviceDefault config.OrderConfig, useServiceDefault bool) OrderConfig {
 	cfg := DefaultOrderConfig()
+	if useServiceDefault {
+		if serviceDefault.PaymentExpireMinutes > 0 {
+			cfg.PaymentExpireMinutes = serviceDefault.PaymentExpireMinutes
+		}
+		if serviceDefault.MaxRefundDays >= orderRefundMaxDaysMin && serviceDefault.MaxRefundDays <= orderRefundMaxDaysMax {
+			cfg.MaxRefundDays = serviceDefault.MaxRefundDays
+		}
+	}
 	if defaultCfg.PaymentExpireMinutes > 0 {
 		cfg.PaymentExpireMinutes = defaultCfg.PaymentExpireMinutes
+	}
+	// 0 表示不限制，仅当显式传入正数时覆盖服务默认值（服务默认值可由 config.yaml 提供 0）。
+	if defaultCfg.MaxRefundDays > 0 {
+		cfg.MaxRefundDays = defaultCfg.MaxRefundDays
 	}
 	return NormalizeOrderConfig(cfg)
 }
 
 // GetOrderConfig 获取订单配置。
 func (s *SettingService) GetOrderConfig(defaultCfg config.OrderConfig) (OrderConfig, error) {
-	fallback := defaultOrderConfigWithFallback(defaultCfg)
+	var serviceDefault config.OrderConfig
+	useServiceDefault := false
+	if s != nil {
+		serviceDefault = s.defaultOrderConfig
+		useServiceDefault = s.hasDefaultOrderConfig
+	}
+	fallback := defaultOrderConfigWithFallback(defaultCfg, serviceDefault, useServiceDefault)
 	if s == nil {
 		return fallback, nil
 	}

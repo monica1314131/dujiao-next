@@ -191,7 +191,7 @@ func (c *Container) initServices() {
 		panic(err)
 	}
 
-	c.SettingService = service.NewSettingService(c.SettingRepo)
+	c.SettingService = service.NewSettingService(c.SettingRepo, c.Config.Order)
 	smtpSetting, err := c.SettingService.GetSMTPSetting(c.Config.Email)
 	if err != nil {
 		logger.Warnw("provider_load_smtp_setting_failed", "error", err)

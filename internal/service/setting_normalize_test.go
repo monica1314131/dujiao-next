@@ -457,6 +457,36 @@ func TestGetOrderRefundConfig(t *testing.T) {
 	}
 }
 
+func TestGetOrderRefundConfigFallsBackToConfigOrder(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo, config.OrderConfig{
+		MaxRefundDays: 7,
+	})
+
+	cfg, err := svc.GetOrderRefundConfig()
+	if err != nil {
+		t.Fatalf("get order refund config failed: %v", err)
+	}
+	if cfg.MaxRefundDays != 7 {
+		t.Fatalf("unexpected max refund days fallback from config order: %d", cfg.MaxRefundDays)
+	}
+}
+
+func TestGetOrderRefundConfigFallsBackToConfigOrderUnlimited(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo, config.OrderConfig{
+		MaxRefundDays: 0,
+	})
+
+	cfg, err := svc.GetOrderRefundConfig()
+	if err != nil {
+		t.Fatalf("get order refund config failed: %v", err)
+	}
+	if cfg.MaxRefundDays != 0 {
+		t.Fatalf("unexpected unlimited max refund days fallback from config order: %d", cfg.MaxRefundDays)
+	}
+}
+
 func TestGetOrderConfigFallsBackToConfigWhenMissing(t *testing.T) {
 	repo := newMockSettingRepo()
 	svc := NewSettingService(repo)
