@@ -472,10 +472,11 @@ func sendMailPlain(addr, host, from string, to []string, msg []byte, username, p
 const (
 	smtpAuthMechanismPlain = "PLAIN"
 	smtpAuthMechanismLogin = "LOGIN"
-	//还有XOAUTH2等机制，实现太复杂好像就微软这个byd搞了，这里暂不考虑
+	// 还有 XOAUTH2 等机制，当前实现暂不处理。
 )
 
 // authenticateSMTPClient 根据服务端 AUTH 能力选择并执行认证。
+// EmailService 认证策略：优先 LOGIN，回退 PLAIN。
 // 对 smtp.office365.com 的 SMTP Basic/LOGIN 场景，通常需要开启 MFA 并使用应用密码。
 func authenticateSMTPClient(client *smtp.Client, host, username, password string) error {
 	if client == nil {
@@ -492,7 +493,7 @@ func authenticateSMTPClient(client *smtp.Client, host, username, password string
 		return nil
 	}
 
-	switch pickSMTPAuthMechanism(host, advertised) {
+	switch pickSMTPAuthMechanism(advertised) {
 	case smtpAuthMechanismLogin:
 		return client.Auth(newLoginAuth(username, password, host))
 	case smtpAuthMechanismPlain:
@@ -502,17 +503,8 @@ func authenticateSMTPClient(client *smtp.Client, host, username, password string
 	}
 }
 
-// pickSMTPAuthMechanism 在 Office365 场景优先 LOGIN，其它场景保持通用优先级。
-func pickSMTPAuthMechanism(host, advertised string) string {
-	if isOffice365SMTPHost(host) {
-		if hasSMTPAuthMechanism(advertised, smtpAuthMechanismLogin) {
-			return smtpAuthMechanismLogin
-		}
-		if hasSMTPAuthMechanism(advertised, smtpAuthMechanismPlain) {
-			return smtpAuthMechanismPlain
-		}
-		return ""
-	}
+// pickSMTPAuthMechanism 根据服务端 AUTH 能力选择机制，优先 LOGIN，再回退 PLAIN。
+func pickSMTPAuthMechanism(advertised string) string {
 	if hasSMTPAuthMechanism(advertised, smtpAuthMechanismLogin) {
 		return smtpAuthMechanismLogin
 	}
@@ -520,12 +512,6 @@ func pickSMTPAuthMechanism(host, advertised string) string {
 		return smtpAuthMechanismPlain
 	}
 	return ""
-}
-
-// isOffice365SMTPHost 判断是否为 Office365 SMTP 主机。
-func isOffice365SMTPHost(host string) bool {
-	h := strings.ToLower(strings.TrimSpace(host))
-	return h == "smtp.office365.com"
 }
 
 // hasSMTPAuthMechanism 判断服务端 AUTH 扩展是否包含指定机制。

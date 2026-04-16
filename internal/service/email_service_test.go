@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/smtp"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -266,19 +267,18 @@ func TestBuildOrderStatusContentFromTemplateIncludesSiteBrand(t *testing.T) {
 func TestPickSMTPAuthMechanism(t *testing.T) {
 	tests := []struct {
 		name       string
-		host       string
 		advertised string
 		want       string
 	}{
-		{name: "office365_prefer_login", host: "smtp.office365.com", advertised: "PLAIN LOGIN XOAUTH2", want: smtpAuthMechanismLogin},
-		{name: "plain_only", host: "smtp.example.com", advertised: "PLAIN", want: smtpAuthMechanismPlain},
-		{name: "case_and_space", host: "smtp.example.com", advertised: "  login   xoauth2 ", want: smtpAuthMechanismLogin},
-		{name: "unsupported", host: "smtp.example.com", advertised: "CRAM-MD5", want: ""},
+		{name: "prefer_login_when_both_exist", advertised: "PLAIN LOGIN XOAUTH2", want: smtpAuthMechanismLogin},
+		{name: "plain_only", advertised: "PLAIN", want: smtpAuthMechanismPlain},
+		{name: "case_and_space", advertised: "  login   xoauth2 ", want: smtpAuthMechanismLogin},
+		{name: "unsupported", advertised: "CRAM-MD5", want: ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := pickSMTPAuthMechanism(tt.host, tt.advertised); got != tt.want {
+			if got := pickSMTPAuthMechanism(tt.advertised); got != tt.want {
 				t.Fatalf("pickSMTPAuthMechanism() = %q, want %q", got, tt.want)
 			}
 		})
@@ -322,22 +322,38 @@ func TestLoginAuthRejectsInsecureRemoteConnection(t *testing.T) {
 }
 
 func TestSMTPServerAuthExtensions(t *testing.T) {
-	if strings.TrimSpace(os.Getenv("TEST_SMTP_AUTH_CHECK")) != "1" {
-		t.Skip("set TEST_SMTP_AUTH_CHECK=1 to check smtp.office365.com:587 AUTH capabilities")
+	host := strings.TrimSpace(os.Getenv("TEST_SMTP_HOST"))
+	if host == "" {
+		host = "smtp.office365.com"
 	}
 
-	host := "smtp.office365.com"
 	port := 587
+	if rawPort := strings.TrimSpace(os.Getenv("TEST_SMTP_PORT")); rawPort != "" {
+		if parsed, err := strconv.Atoi(rawPort); err == nil && parsed > 0 {
+			port = parsed
+		}
+	}
+
 	useStartTLS := true
-	insecureSkipVerify := strings.EqualFold(strings.TrimSpace(os.Getenv("TEST_SMTP_INSECURE_SKIP_VERIFY")), "1") ||
-		strings.EqualFold(strings.TrimSpace(os.Getenv("TEST_SMTP_INSECURE_SKIP_VERIFY")), "true")
+	if rawStartTLS := strings.TrimSpace(os.Getenv("TEST_SMTP_USE_STARTTLS")); rawStartTLS != "" {
+		if parsed, err := strconv.ParseBool(rawStartTLS); err == nil {
+			useStartTLS = parsed
+		}
+	}
+
+	insecureSkipVerify := false
+	if rawInsecure := strings.TrimSpace(os.Getenv("TEST_SMTP_INSECURE_SKIP_VERIFY")); rawInsecure != "" {
+		if parsed, err := strconv.ParseBool(rawInsecure); err == nil {
+			insecureSkipVerify = parsed
+		}
+	}
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	client, closeFn, err := newSMTPTestClient(addr, host, port, useStartTLS, insecureSkipVerify)
 	if err != nil {
 		t.Fatalf("connect smtp server failed: %v", err)
 	}
-	defer closeFn()
+	t.Cleanup(closeFn)
 
 	ok, authLine := client.Extension("AUTH")
 	if !ok {
@@ -365,8 +381,9 @@ func newSMTPTestClient(addr, host string, port int, useStartTLS, insecureSkipVer
 			return nil, nil, err
 		}
 		return client, func() {
-			_ = client.Quit()
-			_ = conn.Close()
+			if err := client.Quit(); err != nil {
+				_ = client.Close()
+			}
 		}, nil
 	}
 
@@ -381,8 +398,9 @@ func newSMTPTestClient(addr, host string, port int, useStartTLS, insecureSkipVer
 		}
 	}
 	return client, func() {
-		_ = client.Quit()
-		_ = client.Close()
+		if err := client.Quit(); err != nil {
+			_ = client.Close()
+		}
 	}, nil
 }
 
@@ -393,6 +411,11 @@ func TestEmailServiceSendOffice365Integration(t *testing.T) {
 		t.Skip("set TEST_OFFICE365_SEND=1 to send a real email via Office365")
 	}
 
+	username := strings.TrimSpace(os.Getenv("TEST_OFFICE365_USERNAME"))
+	if username == "" {
+		t.Skip("set TEST_OFFICE365_USERNAME")
+	}
+
 	password := strings.TrimSpace(os.Getenv("TEST_OFFICE365_PASSWORD"))
 	if password == "" {
 		t.Skip("set TEST_OFFICE365_PASSWORD")
@@ -400,16 +423,21 @@ func TestEmailServiceSendOffice365Integration(t *testing.T) {
 
 	to := strings.TrimSpace(os.Getenv("TEST_OFFICE365_TO"))
 	if to == "" {
-		to = "no_reply@phj233.top"
+		t.Skip("set TEST_OFFICE365_TO")
+	}
+
+	from := strings.TrimSpace(os.Getenv("TEST_OFFICE365_FROM"))
+	if from == "" {
+		from = username
 	}
 
 	svc := NewEmailService(&config.EmailConfig{
 		Enabled:  true,
 		Host:     "smtp.office365.com",
 		Port:     587,
-		Username: "no_reply@phj233.top",
+		Username: username,
 		Password: password,
-		From:     "no_reply@phj233.top",
+		From:     from,
 		FromName: "Dujiao Next",
 		UseTLS:   true,
 		UseSSL:   false,
