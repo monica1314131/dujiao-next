@@ -17,6 +17,8 @@ type Coupon struct {
 	UsageLimit   int            `gorm:"not null;default:0" json:"usage_limit"`                     // 总使用上限（0 表示不限制）
 	UsedCount    int            `gorm:"not null;default:0" json:"used_count"`                      // 已使用次数
 	PerUserLimit int            `gorm:"not null;default:0" json:"per_user_limit"`                  // 每人使用上限（0 表示不限制）
+	PaymentRoles StringArray    `gorm:"type:json" json:"payment_roles"`                            // 付款角色限制（留空不限制）
+	MemberLevels UintArray      `gorm:"type:json" json:"member_levels"`                            // 会员等级限制（留空不限制）
 	ScopeType    string         `gorm:"not null" json:"scope_type"`                                // 适用范围（product）
 	ScopeRefIDs  string         `gorm:"type:text" json:"scope_ref_ids"`                            // 适用商品ID集合（JSON数组）
 	StartsAt     *time.Time     `gorm:"index" json:"starts_at"`                                    // 生效时间

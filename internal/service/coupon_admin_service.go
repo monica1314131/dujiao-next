@@ -31,6 +31,8 @@ type CreateCouponInput struct {
 	MaxDiscount  models.Money
 	UsageLimit   int
 	PerUserLimit int
+	PaymentRoles []string
+	MemberLevels []uint
 	ScopeRefIDs  []uint
 	StartsAt     *time.Time
 	EndsAt       *time.Time
@@ -46,6 +48,8 @@ type UpdateCouponInput struct {
 	MaxDiscount  models.Money
 	UsageLimit   int
 	PerUserLimit int
+	PaymentRoles []string
+	MemberLevels []uint
 	ScopeRefIDs  []uint
 	StartsAt     *time.Time
 	EndsAt       *time.Time
@@ -81,6 +85,11 @@ func (s *CouponAdminService) Create(input CreateCouponInput) (*models.Coupon, er
 	if err != nil {
 		return nil, err
 	}
+	paymentRoles, err := normalizeCouponPaymentRoles(input.PaymentRoles)
+	if err != nil {
+		return nil, err
+	}
+	memberLevels := normalizeCouponMemberLevels(input.MemberLevels)
 
 	if input.StartsAt != nil && input.EndsAt != nil && input.EndsAt.Before(*input.StartsAt) {
 		return nil, ErrCouponInvalid
@@ -100,6 +109,8 @@ func (s *CouponAdminService) Create(input CreateCouponInput) (*models.Coupon, er
 		UsageLimit:   input.UsageLimit,
 		UsedCount:    0,
 		PerUserLimit: input.PerUserLimit,
+		PaymentRoles: paymentRoles,
+		MemberLevels: memberLevels,
 		ScopeType:    constants.ScopeTypeProduct,
 		ScopeRefIDs:  scopeRefIDs,
 		StartsAt:     input.StartsAt,
@@ -155,6 +166,11 @@ func (s *CouponAdminService) Update(id uint, input UpdateCouponInput) (*models.C
 	if err != nil {
 		return nil, err
 	}
+	paymentRoles, err := normalizeCouponPaymentRoles(input.PaymentRoles)
+	if err != nil {
+		return nil, err
+	}
+	memberLevels := normalizeCouponMemberLevels(input.MemberLevels)
 	if input.StartsAt != nil && input.EndsAt != nil && input.EndsAt.Before(*input.StartsAt) {
 		return nil, ErrCouponInvalid
 	}
@@ -171,6 +187,8 @@ func (s *CouponAdminService) Update(id uint, input UpdateCouponInput) (*models.C
 	existing.MaxDiscount = input.MaxDiscount
 	existing.UsageLimit = input.UsageLimit
 	existing.PerUserLimit = input.PerUserLimit
+	existing.PaymentRoles = paymentRoles
+	existing.MemberLevels = memberLevels
 	existing.ScopeType = constants.ScopeTypeProduct
 	existing.ScopeRefIDs = scopeRefIDs
 	existing.StartsAt = input.StartsAt
@@ -215,4 +233,52 @@ func encodeScopeRefIDs(ids []uint) (string, error) {
 		return "", ErrCouponScopeInvalid
 	}
 	return string(payload), nil
+}
+
+// normalizeCouponPaymentRoles 归一化优惠券付款角色限制，仅允许 guest/member，自动去重与去空。
+func normalizeCouponPaymentRoles(raw []string) (models.StringArray, error) {
+	if len(raw) == 0 {
+		return models.StringArray{}, nil
+	}
+	allowed := map[string]struct{}{
+		constants.PaymentRoleGuest:  {},
+		constants.PaymentRoleMember: {},
+	}
+	seen := make(map[string]struct{}, len(raw))
+	normalized := make(models.StringArray, 0, len(raw))
+	for _, item := range raw {
+		role := strings.ToLower(strings.TrimSpace(item))
+		if role == "" {
+			continue
+		}
+		if _, ok := allowed[role]; !ok {
+			return nil, ErrCouponInvalid
+		}
+		if _, ok := seen[role]; ok {
+			continue
+		}
+		seen[role] = struct{}{}
+		normalized = append(normalized, role)
+	}
+	return normalized, nil
+}
+
+// normalizeCouponMemberLevels 归一化优惠券会员等级限制，过滤 0 并去重。
+func normalizeCouponMemberLevels(raw []uint) models.UintArray {
+	if len(raw) == 0 {
+		return models.UintArray{}
+	}
+	seen := make(map[uint]struct{}, len(raw))
+	normalized := make(models.UintArray, 0, len(raw))
+	for _, item := range raw {
+		if item == 0 {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		normalized = append(normalized, item)
+	}
+	return normalized
 }

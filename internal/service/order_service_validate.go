@@ -222,7 +222,14 @@ func (s *OrderService) buildOrderResult(input orderCreateParams) (*orderBuildRes
 	couponCode := strings.TrimSpace(input.CouponCode)
 	if couponCode != "" {
 		couponService := NewCouponService(s.couponRepo, s.couponUsageRepo)
-		discount, coupon, err := couponService.ApplyCoupon(models.NewMoneyFromDecimal(originalAmount), couponCode, input.UserID, orderItems)
+		discount, coupon, err := couponService.ApplyCoupon(
+			models.NewMoneyFromDecimal(originalAmount),
+			couponCode,
+			input.UserID,
+			orderItems,
+			input.IsGuest,
+			userMemberLevelID,
+		)
 		if err != nil {
 			return nil, err
 		}

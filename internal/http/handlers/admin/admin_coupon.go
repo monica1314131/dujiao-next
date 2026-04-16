@@ -16,17 +16,19 @@ import (
 
 // CreateCouponRequest 创建优惠券请求
 type CreateCouponRequest struct {
-	Code         string  `json:"code" binding:"required"`
-	Type         string  `json:"type" binding:"required"`
-	Value        float64 `json:"value" binding:"required"`
-	MinAmount    float64 `json:"min_amount"`
-	MaxDiscount  float64 `json:"max_discount"`
-	UsageLimit   int     `json:"usage_limit"`
-	PerUserLimit int     `json:"per_user_limit"`
-	ScopeRefIDs  []uint  `json:"scope_ref_ids" binding:"required"`
-	StartsAt     string  `json:"starts_at"`
-	EndsAt       string  `json:"ends_at"`
-	IsActive     *bool   `json:"is_active"`
+	Code         string   `json:"code" binding:"required"`
+	Type         string   `json:"type" binding:"required"`
+	Value        float64  `json:"value" binding:"required"`
+	MinAmount    float64  `json:"min_amount"`
+	MaxDiscount  float64  `json:"max_discount"`
+	UsageLimit   int      `json:"usage_limit"`
+	PerUserLimit int      `json:"per_user_limit"`
+	PaymentRoles []string `json:"payment_roles"`
+	MemberLevels []uint   `json:"member_levels"`
+	ScopeRefIDs  []uint   `json:"scope_ref_ids" binding:"required"`
+	StartsAt     string   `json:"starts_at"`
+	EndsAt       string   `json:"ends_at"`
+	IsActive     *bool    `json:"is_active"`
 }
 
 // CreateCoupon 创建优惠券
@@ -56,6 +58,8 @@ func (h *Handler) CreateCoupon(c *gin.Context) {
 		MaxDiscount:  models.NewMoneyFromDecimal(decimal.NewFromFloat(req.MaxDiscount)),
 		UsageLimit:   req.UsageLimit,
 		PerUserLimit: req.PerUserLimit,
+		PaymentRoles: req.PaymentRoles,
+		MemberLevels: req.MemberLevels,
 		ScopeRefIDs:  req.ScopeRefIDs,
 		StartsAt:     startsAt,
 		EndsAt:       endsAt,
@@ -108,6 +112,8 @@ func (h *Handler) UpdateCoupon(c *gin.Context) {
 		MaxDiscount:  models.NewMoneyFromDecimal(decimal.NewFromFloat(req.MaxDiscount)),
 		UsageLimit:   req.UsageLimit,
 		PerUserLimit: req.PerUserLimit,
+		PaymentRoles: req.PaymentRoles,
+		MemberLevels: req.MemberLevels,
 		ScopeRefIDs:  req.ScopeRefIDs,
 		StartsAt:     startsAt,
 		EndsAt:       endsAt,

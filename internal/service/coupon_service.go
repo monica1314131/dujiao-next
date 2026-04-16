@@ -27,7 +27,7 @@ func NewCouponService(couponRepo repository.CouponRepository, usageRepo reposito
 }
 
 // ApplyCoupon 计算优惠券折扣金额
-func (s *CouponService) ApplyCoupon(subtotal models.Money, code string, userID uint, items []models.OrderItem) (models.Money, *models.Coupon, error) {
+func (s *CouponService) ApplyCoupon(subtotal models.Money, code string, userID uint, items []models.OrderItem, isGuest bool, memberLevelID uint) (models.Money, *models.Coupon, error) {
 	trimmed := strings.TrimSpace(code)
 	if trimmed == "" {
 		return models.Money{}, nil, ErrCouponInvalid
@@ -54,6 +54,12 @@ func (s *CouponService) ApplyCoupon(subtotal models.Money, code string, userID u
 
 	if coupon.UsageLimit > 0 && coupon.UsedCount >= coupon.UsageLimit {
 		return models.Money{}, coupon, ErrCouponUsageLimit
+	}
+	if roleErr := resolveCouponPaymentRoleError(coupon, isGuest); roleErr != nil {
+		return models.Money{}, coupon, roleErr
+	}
+	if !matchesCouponMemberLevel(coupon, memberLevelID) {
+		return models.Money{}, coupon, ErrCouponMemberLevelNotAllowed
 	}
 
 	if coupon.PerUserLimit > 0 && userID != 0 {
@@ -89,6 +95,69 @@ func (s *CouponService) ApplyCoupon(subtotal models.Money, code string, userID u
 	}
 
 	return discount, coupon, nil
+}
+
+// matchesCouponRole 判断当前下单角色是否满足优惠券付款角色限制；未配置限制时默认允许。
+func matchesCouponRole(coupon *models.Coupon, isGuest bool) bool {
+	if coupon == nil || len(coupon.PaymentRoles) == 0 {
+		return true
+	}
+	targetRole := constants.PaymentRoleMember
+	if isGuest {
+		targetRole = constants.PaymentRoleGuest
+	}
+	for _, role := range coupon.PaymentRoles {
+		if strings.EqualFold(strings.TrimSpace(role), targetRole) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveCouponPaymentRoleError 解析付款角色限制不满足时的业务错误。
+// 当限制仅单选一个角色时返回更精确的提示错误；否则返回通用角色不匹配错误。
+func resolveCouponPaymentRoleError(coupon *models.Coupon, isGuest bool) error {
+	if matchesCouponRole(coupon, isGuest) {
+		return nil
+	}
+	if coupon == nil || len(coupon.PaymentRoles) == 0 {
+		return ErrCouponPaymentRoleNotAllowed
+	}
+
+	roles := make(map[string]struct{}, len(coupon.PaymentRoles))
+	for _, role := range coupon.PaymentRoles {
+		normalized := strings.ToLower(strings.TrimSpace(role))
+		if normalized != constants.PaymentRoleGuest && normalized != constants.PaymentRoleMember {
+			continue
+		}
+		roles[normalized] = struct{}{}
+	}
+
+	if len(roles) == 1 {
+		if _, ok := roles[constants.PaymentRoleGuest]; ok {
+			return ErrCouponPaymentRoleGuestOnly
+		}
+		if _, ok := roles[constants.PaymentRoleMember]; ok {
+			return ErrCouponPaymentRoleMemberOnly
+		}
+	}
+	return ErrCouponPaymentRoleNotAllowed
+}
+
+// matchesCouponMemberLevel 判断当前会员等级是否满足优惠券会员等级限制；未配置限制时默认允许。
+func matchesCouponMemberLevel(coupon *models.Coupon, memberLevelID uint) bool {
+	if coupon == nil || len(coupon.MemberLevels) == 0 {
+		return true
+	}
+	if memberLevelID == 0 {
+		return false
+	}
+	for _, levelID := range coupon.MemberLevels {
+		if levelID == memberLevelID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *CouponService) resolveEligibleSubtotal(coupon *models.Coupon, items []models.OrderItem) (models.Money, error) {
