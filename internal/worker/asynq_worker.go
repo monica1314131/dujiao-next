@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dujiao-next/internal/constants"
+	"github.com/dujiao-next/internal/htmltext"
 	"github.com/dujiao-next/internal/logger"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/provider"
@@ -157,6 +159,10 @@ func (c *Consumer) handleOrderStatusEmail(_ context.Context, task *asynq.Task) e
 		input.AttachmentContent = payloadText
 	} else {
 		input.FulfillmentInfo = payloadText
+	}
+	// 使用说明只在交付类场景追加，避免被追加到退款/取消等无关邮件正文里。
+	if status == constants.OrderStatusDelivered || status == constants.OrderStatusCompleted {
+		input.Instructions = buildOrderInstructionsEmailText(order, locale)
 	}
 	if err := c.EmailService.SendOrderStatusEmailWithTemplate(receiverEmail, input, locale, tmplSetting); err != nil {
 		switch {
@@ -474,6 +480,59 @@ func (c *Consumer) handleReconciliationRun(ctx context.Context, task *asynq.Task
 		return err
 	}
 	return nil
+}
+
+// buildOrderInstructionsEmailText 收集订单项的交付使用说明（多语言选取 + HTML 去标签 + 去重）。
+func buildOrderInstructionsEmailText(order *models.Order, locale string) string {
+	if order == nil {
+		return ""
+	}
+	seen := make(map[string]struct{})
+	var parts []string
+	add := func(raw models.JSON) {
+		text := localizedInstructionsText(raw, locale)
+		if text == "" {
+			return
+		}
+		plain := htmltext.StripToPlainText(text)
+		if plain == "" {
+			return
+		}
+		if _, ok := seen[plain]; ok {
+			return
+		}
+		seen[plain] = struct{}{}
+		parts = append(parts, plain)
+	}
+	for _, item := range order.Items {
+		add(item.InstructionsJSON)
+	}
+	for _, child := range order.Children {
+		for _, item := range child.Items {
+			add(item.InstructionsJSON)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func localizedInstructionsText(raw models.JSON, locale string) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	candidates := []string{strings.TrimSpace(locale), "zh-CN", "en-US", "zh-TW"}
+	for _, key := range candidates {
+		if key == "" {
+			continue
+		}
+		if value, ok := raw[key]; ok {
+			if s, ok := value.(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					return trimmed
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // buildOrderFulfillmentEmailPayload 组装订单状态邮件中的交付内容文本。

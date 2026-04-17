@@ -41,6 +41,88 @@ func TestBuildOrderFulfillmentEmailPayloadNilOrder(t *testing.T) {
 	}
 }
 
+func TestBuildOrderInstructionsEmailText(t *testing.T) {
+	t.Run("nil order returns empty", func(t *testing.T) {
+		if got := buildOrderInstructionsEmailText(nil, "zh-CN"); got != "" {
+			t.Fatalf("expected empty, got %q", got)
+		}
+	})
+
+	t.Run("locale preferred over fallback", func(t *testing.T) {
+		order := &models.Order{
+			Items: []models.OrderItem{
+				{InstructionsJSON: models.JSON{
+					"zh-CN": "<p>中文说明</p>",
+					"en-US": "<p>English</p>",
+				}},
+			},
+		}
+		if got := buildOrderInstructionsEmailText(order, "en-US"); got != "English" {
+			t.Fatalf("want 'English', got %q", got)
+		}
+	})
+
+	t.Run("falls back to zh-CN when locale missing", func(t *testing.T) {
+		order := &models.Order{
+			Items: []models.OrderItem{
+				{InstructionsJSON: models.JSON{"zh-CN": "fallback"}},
+			},
+		}
+		if got := buildOrderInstructionsEmailText(order, "ja-JP"); got != "fallback" {
+			t.Fatalf("want 'fallback', got %q", got)
+		}
+	})
+
+	t.Run("dedupes identical items and joins distinct", func(t *testing.T) {
+		order := &models.Order{
+			Items: []models.OrderItem{
+				{InstructionsJSON: models.JSON{"zh-CN": "<p>A</p>"}},
+				{InstructionsJSON: models.JSON{"zh-CN": "<p>A</p>"}}, // 重复，应去重
+				{InstructionsJSON: models.JSON{"zh-CN": "<p>B</p>"}},
+			},
+		}
+		got := buildOrderInstructionsEmailText(order, "zh-CN")
+		if got != "A\n\nB" {
+			t.Fatalf("want 'A\\n\\nB', got %q", got)
+		}
+	})
+
+	t.Run("collects from children items", func(t *testing.T) {
+		order := &models.Order{
+			Children: []models.Order{
+				{Items: []models.OrderItem{{InstructionsJSON: models.JSON{"zh-CN": "child1"}}}},
+				{Items: []models.OrderItem{{InstructionsJSON: models.JSON{"zh-CN": "child2"}}}},
+			},
+		}
+		got := buildOrderInstructionsEmailText(order, "zh-CN")
+		if got != "child1\n\nchild2" {
+			t.Fatalf("unexpected: %q", got)
+		}
+	})
+
+	t.Run("empty instructions yield empty result", func(t *testing.T) {
+		order := &models.Order{
+			Items: []models.OrderItem{{InstructionsJSON: nil}},
+		}
+		if got := buildOrderInstructionsEmailText(order, "zh-CN"); got != "" {
+			t.Fatalf("expected empty, got %q", got)
+		}
+	})
+
+	t.Run("strips HTML from instructions", func(t *testing.T) {
+		order := &models.Order{
+			Items: []models.OrderItem{
+				{InstructionsJSON: models.JSON{"zh-CN": "<p>步骤一</p><ul><li>登录</li><li>激活</li></ul>"}},
+			},
+		}
+		got := buildOrderInstructionsEmailText(order, "zh-CN")
+		want := "步骤一\n\n• 登录\n• 激活"
+		if got != want {
+			t.Fatalf("want %q, got %q", want, got)
+		}
+	})
+}
+
 func TestBuildOrderFulfillmentEmailPayloadPreferOrderFulfillment(t *testing.T) {
 	order := &models.Order{
 		Fulfillment: &models.Fulfillment{Payload: "  MAIN-LINE-1\nMAIN-LINE-2  "},

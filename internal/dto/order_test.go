@@ -95,6 +95,52 @@ func TestOrderDetailOmitsSensitiveFields(t *testing.T) {
 	}
 }
 
+func TestOrderDetailHidesInstructionsBeforePayment(t *testing.T) {
+	instructions := models.JSON{"zh-CN": "账号使用方法：…"}
+	mkOrder := func(paidAt *time.Time) *models.Order {
+		return &models.Order{
+			ID:          42,
+			OrderNo:     "ORD-INST",
+			Status:      "pending_payment",
+			Currency:    "CNY",
+			TotalAmount: newMoney("9.90"),
+			PaidAt:      paidAt,
+			Items: []models.OrderItem{
+				{
+					ID:               1,
+					ProductID:        5,
+					SKUID:            10,
+					TitleJSON:        models.JSON{"zh-CN": "商品A"},
+					InstructionsJSON: instructions,
+					FulfillmentType:  "auto",
+				},
+			},
+		}
+	}
+
+	// 未付款：instructions 必须被屏蔽
+	unpaid := NewOrderDetail(mkOrder(nil))
+	if unpaid.Items[0].Instructions != nil {
+		t.Fatalf("unpaid order must not expose instructions, got %v", unpaid.Items[0].Instructions)
+	}
+
+	// 已付款：instructions 正常返回
+	now := time.Now()
+	paid := NewOrderDetail(mkOrder(&now))
+	if paid.Items[0].Instructions == nil {
+		t.Fatal("paid order should expose instructions")
+	}
+	if got := paid.Items[0].Instructions["zh-CN"]; got != "账号使用方法：…" {
+		t.Fatalf("instructions mismatch: %v", got)
+	}
+
+	// Summary 路径永远不应包含 instructions
+	summary := NewOrderSummary(mkOrder(&now))
+	if summary.Items[0].Instructions != nil {
+		t.Fatal("order summary must never expose instructions")
+	}
+}
+
 func TestOrderSummaryOmitsSensitiveFields(t *testing.T) {
 	order := &models.Order{
 		ID:            1,

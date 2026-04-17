@@ -735,6 +735,27 @@ func buildChannelOrderPreviewResponse(preview *service.OrderPreview, locale stri
 	}
 }
 
+// joinLocalizedInstructions 拼接 items 的多语言交付说明（去重，按 locale 取值）。
+func joinLocalizedInstructions(items []models.OrderItem, locale string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	seen := make(map[string]struct{}, len(items))
+	var parts []string
+	for _, item := range items {
+		text := strings.TrimSpace(resolveLocalizedJSON(item.InstructionsJSON, locale, "zh-CN"))
+		if text == "" {
+			continue
+		}
+		if _, ok := seen[text]; ok {
+			continue
+		}
+		seen[text] = struct{}{}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func buildChannelOrderDetailResponse(order *models.Order, locale string) gin.H {
 	resp := gin.H{
 		"order_id":           order.ID,
@@ -758,8 +779,13 @@ func buildChannelOrderDetailResponse(order *models.Order, locale string) gin.H {
 		"cancelled_at":       order.CanceledAt,
 	}
 
+	orderPaid := order.PaidAt != nil
 	items := make([]gin.H, 0, len(order.Items))
 	for _, item := range order.Items {
+		instructions := ""
+		if orderPaid {
+			instructions = resolveLocalizedJSON(item.InstructionsJSON, locale, "zh-CN")
+		}
 		items = append(items, gin.H{
 			"product_id":         item.ProductID,
 			"product_title":      resolveLocalizedJSON(item.TitleJSON, locale, "zh-CN"),
@@ -771,12 +797,17 @@ func buildChannelOrderDetailResponse(order *models.Order, locale string) gin.H {
 			"coupon_discount":    item.CouponDiscount.StringFixed(2),
 			"promotion_discount": item.PromotionDiscount.StringFixed(2),
 			"fulfillment_type":   item.FulfillmentType,
+			"instructions":       instructions,
 		})
 	}
 	resp["items"] = items
 
 	children := make([]gin.H, 0, len(order.Children))
 	for _, child := range order.Children {
+		childInstructions := ""
+		if orderPaid {
+			childInstructions = joinLocalizedInstructions(child.Items, locale)
+		}
 		childResp := gin.H{
 			"order_id": child.ID,
 			"order_no": child.OrderNo,
@@ -788,6 +819,7 @@ func buildChannelOrderDetailResponse(order *models.Order, locale string) gin.H {
 				"type":         child.Fulfillment.Type,
 				"payload":      child.Fulfillment.Payload,
 				"delivered_at": child.Fulfillment.DeliveredAt,
+				"instructions": childInstructions,
 			}
 		} else {
 			childResp["fulfillment"] = nil
@@ -796,14 +828,20 @@ func buildChannelOrderDetailResponse(order *models.Order, locale string) gin.H {
 	}
 	resp["children"] = children
 
+	parentInstructions := ""
+	if orderPaid {
+		parentInstructions = joinLocalizedInstructions(order.Items, locale)
+	}
 	if order.Fulfillment != nil {
 		resp["fulfillment_status"] = order.Fulfillment.Status
 		resp["fulfillment_result"] = order.Fulfillment.Payload
 		resp["fulfillment_delivered_at"] = order.Fulfillment.DeliveredAt
+		resp["fulfillment_instructions"] = parentInstructions
 	} else {
 		resp["fulfillment_status"] = ""
 		resp["fulfillment_result"] = nil
 		resp["fulfillment_delivered_at"] = nil
+		resp["fulfillment_instructions"] = ""
 	}
 
 	return resp

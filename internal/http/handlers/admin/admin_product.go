@@ -98,6 +98,7 @@ type CreateProductRequest struct {
 	TitleJSON           map[string]interface{} `json:"title" binding:"required"`
 	DescriptionJSON     map[string]interface{} `json:"description"`
 	ContentJSON         map[string]interface{} `json:"content"`
+	InstructionsJSON    map[string]interface{} `json:"instructions"`
 	ManualFormSchema    map[string]interface{} `json:"manual_form_schema"`
 	PriceAmount         float64                `json:"price_amount" binding:"required"`
 	CostPriceAmount     float64                `json:"cost_price_amount"`
@@ -149,6 +150,7 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 		TitleJSON:            req.TitleJSON,
 		DescriptionJSON:      req.DescriptionJSON,
 		ContentJSON:          req.ContentJSON,
+		InstructionsJSON:     req.InstructionsJSON,
 		ManualFormSchemaJSON: req.ManualFormSchema,
 		PriceAmount:          decimal.NewFromFloat(req.PriceAmount),
 		CostPriceAmount:      decimal.NewFromFloat(req.CostPriceAmount),
@@ -225,6 +227,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		TitleJSON:            req.TitleJSON,
 		DescriptionJSON:      req.DescriptionJSON,
 		ContentJSON:          req.ContentJSON,
+		InstructionsJSON:     req.InstructionsJSON,
 		ManualFormSchemaJSON: req.ManualFormSchema,
 		PriceAmount:          decimal.NewFromFloat(req.PriceAmount),
 		CostPriceAmount:      decimal.NewFromFloat(req.CostPriceAmount),

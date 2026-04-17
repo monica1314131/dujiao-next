@@ -27,6 +27,7 @@ type OrderItem struct {
 	FulfillmentType              string         `gorm:"not null" json:"fulfillment_type"`                                       // 交付类型
 	ManualFormSchemaSnapshotJSON JSON           `gorm:"type:json" json:"manual_form_schema_snapshot"`                           // 人工交付表单 schema 快照
 	ManualFormSubmissionJSON     JSON           `gorm:"type:json" json:"manual_form_submission"`                                // 人工交付表单提交值
+	InstructionsJSON             JSON           `gorm:"type:json" json:"instructions"`                                          // 交付后使用说明快照（多语言）
 	CreatedAt                    time.Time      `gorm:"index" json:"created_at"`                                                // 创建时间
 	UpdatedAt                    time.Time      `gorm:"index" json:"updated_at"`                                                // 更新时间
 	DeletedAt                    gorm.DeletedAt `gorm:"index" json:"-"`                                                         // 软删除时间

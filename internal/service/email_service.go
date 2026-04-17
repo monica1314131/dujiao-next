@@ -53,6 +53,7 @@ type OrderStatusEmailInput struct {
 	SiteName          string
 	SiteURL           string
 	FulfillmentInfo   string
+	Instructions      string // 交付使用说明（纯文本，已去 HTML）
 	IsGuest           bool
 	AttachmentName    string // 非空时表示交付内容以附件形式发送
 	AttachmentContent string // 附件内容
@@ -123,6 +124,7 @@ func buildOrderStatusContentFromTemplate(input OrderStatusEmailInput, locale str
 		"site_name":        strings.TrimSpace(input.SiteName),
 		"site_url":         strings.TrimSpace(input.SiteURL),
 		"fulfillment_info": strings.TrimSpace(input.FulfillmentInfo),
+		"instructions":     strings.TrimSpace(input.Instructions),
 	}
 	if status == constants.OrderStatusRefunded || status == constants.OrderStatusPartiallyRefunded {
 		variables["refund_amount"] = input.RefundAmount.String()
@@ -131,6 +133,12 @@ func buildOrderStatusContentFromTemplate(input OrderStatusEmailInput, locale str
 
 	subject := renderTemplate(localeTmpl.Subject, variables)
 	body := renderTemplate(localeTmpl.Body, variables)
+
+	// 存量兼容：历史自定义模板未引用 {{instructions}} 时自动在末尾追加使用说明，避免因占位符缺失导致说明丢失。
+	// 只在交付含内容场景生效（此时 input.Instructions 才会被填充）。
+	if strings.TrimSpace(input.Instructions) != "" && !strings.Contains(localeTmpl.Body, "{{instructions}}") {
+		body = strings.TrimRight(body, "\n") + "\n\n" + strings.TrimSpace(input.Instructions)
+	}
 
 	// 交付内容以附件形式发送时追加提示
 	if input.AttachmentName != "" {

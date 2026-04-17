@@ -59,6 +59,7 @@ type CreateProductInput struct {
 	TitleJSON            map[string]interface{}
 	DescriptionJSON      map[string]interface{}
 	ContentJSON          map[string]interface{}
+	InstructionsJSON     map[string]interface{}
 	ManualFormSchemaJSON map[string]interface{}
 	PriceAmount          decimal.Decimal
 	CostPriceAmount      decimal.Decimal
@@ -239,6 +240,7 @@ func (s *ProductService) Create(input CreateProductInput) (*models.Product, erro
 		TitleJSON:            models.JSON(input.TitleJSON),
 		DescriptionJSON:      models.JSON(input.DescriptionJSON),
 		ContentJSON:          models.JSON(input.ContentJSON),
+		InstructionsJSON:     models.JSON(input.InstructionsJSON),
 		ManualFormSchemaJSON: models.JSON{},
 		PriceAmount:          models.NewMoneyFromDecimal(priceAmount),
 		CostPriceAmount:      models.NewMoneyFromDecimal(costPriceAmount),
@@ -318,6 +320,7 @@ func (s *ProductService) Update(id string, input CreateProductInput) (*models.Pr
 	product.TitleJSON = models.JSON(input.TitleJSON)
 	product.DescriptionJSON = models.JSON(input.DescriptionJSON)
 	product.ContentJSON = models.JSON(input.ContentJSON)
+	product.InstructionsJSON = models.JSON(input.InstructionsJSON)
 	product.ManualFormSchemaJSON = models.JSON{}
 	product.PriceAmount = models.NewMoneyFromDecimal(priceAmount)
 	product.SortOrder = input.SortOrder

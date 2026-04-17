@@ -150,15 +150,15 @@ func OrderEmailTemplateDefaultSetting() OrderEmailTemplateSetting {
 			DeliveredWithContent: OrderEmailSceneTemplate{
 				ZHCN: OrderEmailLocalizedTemplate{
 					Subject: "订单状态更新：{{status}}",
-					Body:    "订单号：{{order_no}}\n状态：{{status}}\n金额：{{amount}} {{currency}}\n\n交付内容：\n{{fulfillment_info}}\n\n感谢您的购买。\n\n{{site_name}} 的网址：{{site_url}}",
+					Body:    "订单号：{{order_no}}\n状态：{{status}}\n金额：{{amount}} {{currency}}\n\n交付内容：\n{{fulfillment_info}}\n\n使用说明：\n{{instructions}}\n\n感谢您的购买。\n\n{{site_name}} 的网址：{{site_url}}",
 				},
 				ZHTW: OrderEmailLocalizedTemplate{
 					Subject: "訂單狀態更新：{{status}}",
-					Body:    "訂單號：{{order_no}}\n狀態：{{status}}\n金額：{{amount}} {{currency}}\n\n交付內容：\n{{fulfillment_info}}\n\n感謝您的購買。\n\n{{site_name}} 的網址：{{site_url}}",
+					Body:    "訂單號：{{order_no}}\n狀態：{{status}}\n金額：{{amount}} {{currency}}\n\n交付內容：\n{{fulfillment_info}}\n\n使用說明：\n{{instructions}}\n\n感謝您的購買。\n\n{{site_name}} 的網址：{{site_url}}",
 				},
 				ENUS: OrderEmailLocalizedTemplate{
 					Subject: "Order status updated: {{status}}",
-					Body:    "Order No: {{order_no}}\nStatus: {{status}}\nAmount: {{amount}} {{currency}}\n\nDelivery content:\n{{fulfillment_info}}\n\nThank you for your purchase.\n\n{{site_name}}'s Site URL: {{site_url}}",
+					Body:    "Order No: {{order_no}}\nStatus: {{status}}\nAmount: {{amount}} {{currency}}\n\nDelivery content:\n{{fulfillment_info}}\n\nUsage instructions:\n{{instructions}}\n\nThank you for your purchase.\n\n{{site_name}}'s Site URL: {{site_url}}",
 				},
 			},
 			Canceled: OrderEmailSceneTemplate{

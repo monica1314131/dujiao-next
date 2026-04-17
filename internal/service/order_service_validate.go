@@ -194,6 +194,7 @@ func (s *OrderService) buildOrderResult(input orderCreateParams) (*orderBuildRes
 			FulfillmentType:              fulfillmentType,
 			ManualFormSchemaSnapshotJSON: manualSchemaSnapshot,
 			ManualFormSubmissionJSON:     manualSubmission,
+			InstructionsJSON:             product.InstructionsJSON,
 			CreatedAt:                    now,
 			UpdatedAt:                    now,
 		}
